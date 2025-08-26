@@ -1,0 +1,135 @@
+// Core data models and interfaces for AI Training Simulator
+
+import { BaseMessage } from "@langchain/core/messages";
+
+/** Core Training Data Models */
+
+export interface ScenarioData {
+  title: string;
+  description: string;
+  required_steps: string[];
+  critical_errors: string[];
+  time_pressure: number;
+}
+
+export interface PersonaData {
+  name: string;
+  background: string;
+  personality_traits: string[];
+  hidden_motivations: string[];
+  communication_style: string;
+  emotional_arc: string[];
+}
+
+export interface ScoringMetrics {
+  policy_adherence: number;
+  empathy_index: number;
+  completeness: number;
+  escalation_judgment: number;
+  time_efficiency: number;
+}
+
+export interface SessionData {
+  id: string;
+  scenario: ScenarioData;
+  persona: PersonaData;
+  conversation: BaseMessage[];
+  scores: ScoringMetrics[];
+  finalFeedback?: string;
+  startTime: Date;
+  endTime?: Date;
+}
+
+/** Session Storage Interfaces */
+
+export interface SessionStore {
+  [sessionId: string]: {
+    state: TrainingSimulatorState;
+    startTime: Date;
+    lastActivity: Date;
+    isActive: boolean;
+  };
+}
+
+export interface CompletedSession {
+  id: string;
+  userId: string;
+  scenario: ScenarioData;
+  persona: PersonaData;
+  transcript: BaseMessage[];
+  finalScores: ScoringMetrics;
+  feedback: string;
+  duration: number;
+  completedAt: Date;
+}
+
+/** Vector Database Types */
+
+export interface DocumentMetadata {
+  type: 'sop' | 'script' | 'best_practice';
+  category: 'booking' | 'complaint' | 'overbooking' | 'general';
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  tags: string[];
+}
+
+export interface VectorDocument {
+  id: string;
+  content: string;
+  embedding: number[];
+  metadata: {
+    source: string;
+    type: 'sop' | 'script' | 'training_material';
+    category: string;
+    difficulty: string;
+    section?: string;
+    version: string;
+    lastUpdated: Date;
+  };
+}
+
+export interface RetrievalResult {
+  content: string;
+  metadata: DocumentMetadata;
+  score: number;
+}
+
+export interface MetadataFilter {
+  type?: string;
+  category?: string;
+  difficulty?: string;
+  tags?: string[];
+}
+
+/** Session Status Types */
+
+export type SessionStatus = 'creating' | 'active' | 'complete';
+
+/** Training Simulator State Interface */
+
+export interface TrainingSimulatorState {
+  // Messages from MessagesAnnotation
+  messages: BaseMessage[];
+  
+  // Session Management
+  sessionId: string;
+  sessionStatus: SessionStatus;
+  
+  // Scenario & Persona
+  scenario?: ScenarioData;
+  persona?: PersonaData;
+  
+  // Training Progress
+  requiredSteps: string[];
+  completedSteps: string[];
+  
+  // Silent Scoring
+  scores?: ScoringMetrics;
+  criticalErrors: string[];
+  
+  // Knowledge Context
+  retrievedContext: string[];
+  
+  // UI State
+  currentEmotion?: string;
+  turnCount: number;
+}
