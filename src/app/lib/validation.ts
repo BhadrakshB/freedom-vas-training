@@ -144,6 +144,58 @@ export const SCENARIO_JSON_SCHEMA = {
   additionalProperties: false
 } as const;
 
+/** JSON Schema validation for persona output */
+
+export const PERSONA_JSON_SCHEMA = {
+  type: 'object',
+  required: ['name', 'background', 'personality_traits', 'hidden_motivations', 'communication_style', 'emotional_arc'],
+  properties: {
+    name: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 100
+    },
+    background: {
+      type: 'string',
+      minLength: 20,
+      maxLength: 1000
+    },
+    personality_traits: {
+      type: 'array',
+      items: {
+        type: 'string',
+        minLength: 1
+      },
+      minItems: 2,
+      maxItems: 10
+    },
+    hidden_motivations: {
+      type: 'array',
+      items: {
+        type: 'string',
+        minLength: 1
+      },
+      minItems: 1,
+      maxItems: 8
+    },
+    communication_style: {
+      type: 'string',
+      minLength: 10,
+      maxLength: 500
+    },
+    emotional_arc: {
+      type: 'array',
+      items: {
+        type: 'string',
+        minLength: 1
+      },
+      minItems: 2,
+      maxItems: 8
+    }
+  },
+  additionalProperties: false
+} as const;
+
 /**
  * Validate scenario data against JSON schema
  */
@@ -185,6 +237,62 @@ export function validateScenarioAgainstSchema(data: any): { valid: boolean; erro
   // Validate time_pressure
   if (typeof data.time_pressure !== 'number' || data.time_pressure < 1 || data.time_pressure > 10) {
     errors.push('Time pressure must be a number between 1 and 10');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Validate persona data against JSON schema
+ */
+export function validatePersonaAgainstSchema(data: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // Check required fields
+  const requiredFields = ['name', 'background', 'personality_traits', 'hidden_motivations', 'communication_style', 'emotional_arc'];
+  for (const field of requiredFields) {
+    if (!(field in data)) {
+      errors.push(`Missing required field: ${field}`);
+    }
+  }
+
+  // Validate name
+  if (typeof data.name !== 'string' || data.name.length === 0 || data.name.length > 100) {
+    errors.push('Name must be a non-empty string with max 100 characters');
+  }
+
+  // Validate background
+  if (typeof data.background !== 'string' || data.background.length < 20 || data.background.length > 1000) {
+    errors.push('Background must be a string between 20 and 1000 characters');
+  }
+
+  // Validate personality_traits
+  if (!Array.isArray(data.personality_traits) || data.personality_traits.length < 2 || data.personality_traits.length > 10) {
+    errors.push('Personality traits must be an array with 2-10 items');
+  } else if (!data.personality_traits.every((trait: any) => typeof trait === 'string' && trait.length > 0)) {
+    errors.push('All personality traits must be non-empty strings');
+  }
+
+  // Validate hidden_motivations
+  if (!Array.isArray(data.hidden_motivations) || data.hidden_motivations.length === 0 || data.hidden_motivations.length > 8) {
+    errors.push('Hidden motivations must be an array with 1-8 items');
+  } else if (!data.hidden_motivations.every((motivation: any) => typeof motivation === 'string' && motivation.length > 0)) {
+    errors.push('All hidden motivations must be non-empty strings');
+  }
+
+  // Validate communication_style
+  if (typeof data.communication_style !== 'string' || data.communication_style.length < 10 || data.communication_style.length > 500) {
+    errors.push('Communication style must be a string between 10 and 500 characters');
+  }
+
+  // Validate emotional_arc
+  if (!Array.isArray(data.emotional_arc) || data.emotional_arc.length < 2 || data.emotional_arc.length > 8) {
+    errors.push('Emotional arc must be an array with 2-8 items');
+  } else if (!data.emotional_arc.every((emotion: any) => typeof emotion === 'string' && emotion.length > 0)) {
+    errors.push('All emotional arc items must be non-empty strings');
   }
 
   return {

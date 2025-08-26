@@ -20,14 +20,14 @@
   - Write unit tests for scenario generation with mock Pinecone responses
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 4. Create Persona Generator Agent
+- [x] 4. Create Persona Generator Agent
   - Implement persona generation node with psychological depth modeling
   - Add persona consistency validation logic
   - Create JSON schema validation for persona output
   - Write unit tests for persona generation with various scenario inputs
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 5. Create Guest Simulator Agent
+- [x] 5. Create Guest Simulator Agent
   - Implement guest response generation with persona consistency
   - Add emotional arc progression logic
   - Implement natural conversation flow with information revelation
