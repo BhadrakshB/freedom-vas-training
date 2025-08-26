@@ -48,6 +48,7 @@ export interface SessionStore {
     startTime: Date;
     lastActivity: Date;
     isActive: boolean;
+    userId: string;
   };
 }
 

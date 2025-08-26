@@ -101,6 +101,8 @@ export class TrainingSimulatorGraph {
       const initMessage = state.messages[0];
       const initInput = this.parseInitializationInput(initMessage);
 
+      console.log('Creating scenario with input:', initInput);
+
       const scenarioInput: ScenarioCreationInput = {
         trainingObjective: initInput.trainingObjective,
         difficulty: initInput.difficulty,
@@ -108,13 +110,14 @@ export class TrainingSimulatorGraph {
       };
 
       const result = await this.scenarioCreator.createScenario(scenarioInput);
+      console.log('Scenario created successfully:', result.scenario.title);
 
       return {
         scenario: result.scenario,
         requiredSteps: result.scenario.required_steps,
         sessionStatus: 'creating' as const,
         retrievedContext: result.sopReferences.map(ref => ref.content),
-        messages: [new AIMessage(`Scenario created: ${result.scenario.title}`)]
+        messages: [...state.messages, new AIMessage(`Scenario created: ${result.scenario.title}`)]
       };
     } catch (error) {
       console.error('Scenario creation failed:', error);
@@ -126,15 +129,17 @@ export class TrainingSimulatorGraph {
       
       try {
         const fallbackResult = await this.scenarioCreator.createFallbackScenario(fallbackInput);
+        console.log('Using fallback scenario:', fallbackResult.scenario.title);
         
         return {
           scenario: fallbackResult.scenario,
           requiredSteps: fallbackResult.scenario.required_steps,
           sessionStatus: 'creating' as const,
           retrievedContext: [],
-          messages: [new AIMessage(`Fallback scenario created: ${fallbackResult.scenario.title}`)]
+          messages: [...state.messages, new AIMessage(`Fallback scenario created: ${fallbackResult.scenario.title}`)]
         };
       } catch (fallbackError) {
+        console.error('Fallback scenario creation also failed:', fallbackError);
         // Ultimate fallback - create a basic scenario
         const basicScenario = {
           title: 'Basic Customer Service Training',
@@ -149,7 +154,7 @@ export class TrainingSimulatorGraph {
           requiredSteps: basicScenario.required_steps,
           sessionStatus: 'creating' as const,
           retrievedContext: [],
-          messages: [new AIMessage(`Basic scenario created: ${basicScenario.title}`)]
+          messages: [...state.messages, new AIMessage(`Basic scenario created: ${basicScenario.title}`)]
         };
       }
     }
@@ -164,6 +169,8 @@ export class TrainingSimulatorGraph {
         throw new Error('No scenario available for persona generation');
       }
 
+      console.log('Generating persona for scenario:', state.scenario.title);
+
       const personaInput: PersonaGenerationInput = {
         scenario: state.scenario,
         trainingLevel: this.extractDifficultyFromScenario(state.scenario),
@@ -171,11 +178,12 @@ export class TrainingSimulatorGraph {
       };
 
       const result = await this.personaGenerator.generatePersona(personaInput);
+      console.log('Persona generated successfully:', result.persona.name);
 
       return {
         persona: result.persona,
         currentEmotion: result.persona.emotional_arc[0] || 'neutral',
-        messages: [new AIMessage(`Persona created: ${result.persona.name}`)]
+        messages: [...state.messages, new AIMessage(`Persona created: ${result.persona.name}`)]
       };
     } catch (error) {
       console.error('Persona generation failed:', error);
@@ -187,13 +195,15 @@ export class TrainingSimulatorGraph {
       
       try {
         const fallbackResult = this.personaGenerator.createFallbackPersona(fallbackInput);
+        console.log('Using fallback persona:', fallbackResult.persona.name);
         
         return {
           persona: fallbackResult.persona,
           currentEmotion: fallbackResult.persona.emotional_arc[0] || 'neutral',
-          messages: [new AIMessage(`Fallback persona created: ${fallbackResult.persona.name}`)]
+          messages: [...state.messages, new AIMessage(`Fallback persona created: ${fallbackResult.persona.name}`)]
         };
       } catch (fallbackError) {
+        console.error('Fallback persona generation also failed:', fallbackError);
         // Ultimate fallback - create a basic persona
         const basicPersona = {
           name: 'Guest',
@@ -207,7 +217,7 @@ export class TrainingSimulatorGraph {
         return {
           persona: basicPersona,
           currentEmotion: 'neutral',
-          messages: [new AIMessage(`Basic persona created: ${basicPersona.name}`)]
+          messages: [...state.messages, new AIMessage(`Basic persona created: ${basicPersona.name}`)]
         };
       }
     }
@@ -382,9 +392,46 @@ export class TrainingSimulatorGraph {
    * Session Ready Node - marks session as ready for interaction
    */
   private async sessionReadyNode(state: TrainingSimulatorStateType) {
+    // Generate the initial guest message to start the conversation
+    if (state.persona && state.scenario) {
+      try {
+        const initialSimulationInput: GuestSimulationInput = {
+          persona: state.persona,
+          scenario: state.scenario,
+          conversationHistory: [],
+          currentTurn: 0,
+          userResponse: undefined // No user response yet, this is the opening
+        };
+
+        const guestResult = await this.guestSimulator.simulateGuestResponse(initialSimulationInput);
+        
+        return {
+          sessionStatus: 'active' as const,
+          currentEmotion: guestResult.currentEmotion,
+          turnCount: 1,
+          messages: [
+            new AIMessage(`Training session ready. Scenario: ${state.scenario.title}, Persona: ${state.persona.name}`),
+            new AIMessage(guestResult.response)
+          ]
+        };
+      } catch (error) {
+        console.error('Failed to generate initial guest message:', error);
+        // Fallback to basic ready message
+        return {
+          sessionStatus: 'active' as const,
+          currentEmotion: state.persona.emotional_arc[0] || 'neutral',
+          turnCount: 0,
+          messages: [
+            new AIMessage(`Training session ready. Scenario: ${state.scenario.title}, Persona: ${state.persona.name}`),
+            new AIMessage(`Hello, I'm ${state.persona.name}. ${state.scenario.description}`)
+          ]
+        };
+      }
+    }
+
     return {
       sessionStatus: 'active' as const,
-      messages: [new AIMessage(`Training session ready. Scenario: ${state.scenario?.title}, Persona: ${state.persona?.name}`)]
+      messages: [new AIMessage('Training session ready, but scenario or persona is missing.')]
     };
   }
 
@@ -392,14 +439,9 @@ export class TrainingSimulatorGraph {
    * Route from session ready state
    */
   private routeFromSessionReady(state: TrainingSimulatorStateType): string {
-    // If this is initial session creation, mark as ready and end
-    const hasUserInput = this.extractLatestUserResponse(state.messages);
-    if (!hasUserInput || state.turnCount === 0) {
-      return 'ready';
-    }
-    
-    // If we have user input, continue with simulation
-    return 'continue';
+    // During initial session creation, always end here
+    // The session is now ready with scenario, persona, and initial guest message
+    return 'ready';
   }
 
   /**
@@ -555,7 +597,7 @@ export class TrainingSimulatorGraph {
   }
 
   /**
-   * Start a new training session
+   * Start a new training session - runs scenario creation, persona generation, and prepares for training
    */
   async startSession(input: SessionInitInput): Promise<any> {
     const sessionId = this.generateSessionId();
@@ -571,10 +613,23 @@ export class TrainingSimulatorGraph {
       messages: [new HumanMessage(JSON.stringify(input))]
     };
 
+    // Run the session creation flow: scenario → persona → ready
     const result = await this.graph.invoke(initialState);
     
-    // Return the final state after session creation
-    return result;
+    // Ensure we have both scenario and persona before returning
+    if (!result.scenario || !result.persona) {
+      throw new Error('Failed to create scenario and persona during session initialization');
+    }
+    
+    // Return the state ready for training with scenario and persona created
+    return {
+      ...result,
+      sessionStatus: 'active', // Mark as ready for training
+      messages: [
+        ...result.messages,
+        new AIMessage(`Welcome! You'll be helping ${result.persona.name}. ${result.scenario.description}`)
+      ]
+    };
   }
 
   /**

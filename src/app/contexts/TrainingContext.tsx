@@ -60,7 +60,7 @@ export type TrainingAction =
   | { type: 'SET_ERROR'; error?: string }
   | { type: 'RESET_SESSION' };
 
-// Initial state
+// Initial state (REQUIRED FOR REDUCER)
 const initialState: TrainingUIState = {
   phase: 'idle',
   progress: {
@@ -76,7 +76,7 @@ const initialState: TrainingUIState = {
   criticalErrors: [],
 };
 
-// State reducer
+// State reducer (my reducer function)
 function trainingReducer(state: TrainingUIState, action: TrainingAction): TrainingUIState {
   switch (action.type) {
     case 'START_SESSION':
@@ -175,7 +175,7 @@ function trainingReducer(state: TrainingUIState, action: TrainingAction): Traini
   }
 }
 
-// Context interface
+// Context interface (Works like a GetxController/Provider where you have stored the state and helper functions and other properties)
 interface TrainingContextType {
   state: TrainingUIState;
   dispatch: React.Dispatch<TrainingAction>;
@@ -197,16 +197,19 @@ interface TrainingContextType {
   shouldShowTrainingPanel: boolean;
   panelTitle: string;
   mainChatTitle: string;
+  isLoading: boolean;
 }
 
-// Create context
-const TrainingContext = createContext<TrainingContextType | undefined>(undefined);
+// Create context (works like Controller(), you use Get.put() later)
+const TrainingContext = createContext<TrainingContextType | undefined>(undefined); // STEP 1: Creating Context
 
 // Provider component
 interface TrainingProviderProps {
   children: ReactNode;
 }
 
+
+// Actual definition an Business Logic of teh GetxControlelr
 export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(trainingReducer, initialState);
 
@@ -248,6 +251,7 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
   const isFeedbackActive = state.phase === 'feedback' && state.showFeedback;
   const shouldShowMainChat = state.phase === 'idle' || state.phase === 'feedback';
   const shouldShowTrainingPanel = true; // Always show training panel
+  const isLoading = state.isLoading;
   
   const panelTitle = (() => {
     switch (state.phase) {
@@ -301,6 +305,7 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
     shouldShowMainChat,
     shouldShowTrainingPanel,
     panelTitle,
+    isLoading,
     mainChatTitle,
   };
 
@@ -312,7 +317,7 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
 };
 
 // Hook to use the training context
-export const useTraining = (): TrainingContextType => {
+export const useTraining = (): TrainingContextType => { // STEP 2: Check for undefined context
   const context = useContext(TrainingContext);
   if (context === undefined) {
     throw new Error('useTraining must be used within a TrainingProvider');

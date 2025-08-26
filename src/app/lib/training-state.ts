@@ -1,56 +1,57 @@
-// Training Simulator State Annotation for LangGraph
+import { Annotation } from "@langchain/langgraph";
+import { BaseMessage } from "@langchain/core/messages";
 
-import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
-import { 
-  ScenarioData, 
-  PersonaData, 
-  ScoringMetrics, 
-  SessionStatus 
-} from "./types";
+// Define all scoring dimensions from PRD
+export type ScoringDimension = 
+  | "policy_adherence"
+  | "empathy_index"
+  | "completeness"
+  | "escalation_judgment"
+  | "time_efficiency";
 
-/** Training Simulator State Definition */
-export const TrainingSimulatorState = Annotation.Root({
-  // Extend MessagesAnnotation to include chat history with built-in reducer
-  ...MessagesAnnotation.spec,
-  
-  // Session Management
+// State object that persists through the entire training session
+export const TrainingState = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: (prev, update) => [...prev, ...update],
+    default: () => []
+  }),
+  // Scenario data
+  scenario: Annotation<{
+    id: string;
+    title: string;
+    description: string;
+    required_steps: string[];
+    critical_errors: string[];
+    time_pressure: number;
+  }>,
+  // Persona data
+  persona: Annotation<{
+    name: string;
+    background: string;
+    personality_traits: string[];
+    hidden_motivations: string[];
+    communication_style: string;
+    emotional_arc: string[];
+  }>,
+  // Hidden scoring metrics (never visible during session)
+  scores: Annotation<Record<ScoringDimension, number | null>>,
+  missing_steps: Annotation<string[]>({
+    reducer: (prev, update) => update, // Replace rather than accumulate
+    default: () => []
+  }),
+  escalation_points: Annotation<string[]>({
+    reducer: (prev, update) => update, // Replace rather than accumulate
+    default: () => []
+  }),
+  current_emotion: Annotation<string>,
+  turn_count: Annotation<number>,
+  max_turns: Annotation<number>,
+  verdict_ready: Annotation<boolean>,
+  // Session metadata
   sessionId: Annotation<string>,
-  sessionStatus: Annotation<SessionStatus>,
-  
-  // Scenario & Persona
-  scenario: Annotation<ScenarioData>,
-  persona: Annotation<PersonaData>,
-  
-  // Training Progress
-  requiredSteps: Annotation<string[]>({
-    default: () => [],
-    reducer: (prev, update) => [...new Set([...prev, ...update])],
-  }),
-  completedSteps: Annotation<string[]>({
-    default: () => [],
-    reducer: (prev, update) => [...new Set([...prev, ...update])],
-  }),
-  
-  // Silent Scoring
-  scores: Annotation<ScoringMetrics>,
-  criticalErrors: Annotation<string[]>({
-    default: () => [],
-    reducer: (prev, update) => prev.concat(update),
-  }),
-  
-  // Knowledge Context
-  retrievedContext: Annotation<string[]>({
-    default: () => [],
-    reducer: (prev, update) => prev.concat(update),
-  }),
-  
-  // UI State
-  currentEmotion: Annotation<string>,
-  turnCount: Annotation<number>({
-    default: () => 0,
-    reducer: (prev, update) => prev + update,
-  }),
+  startTime: Annotation<Date>,
+  trainingObjective: Annotation<string>,
+  difficultyLevel: Annotation<"Beginner" | "Intermediate" | "Advanced">,
+  // Control flow
+  next: Annotation<"scenario_creator" | "persona_generator" | "guest_simulator" | "scoring_agent" | "feedback_generator" | "done">,
 });
-
-/** Type alias for the state */
-export type TrainingSimulatorStateType = typeof TrainingSimulatorState.State;

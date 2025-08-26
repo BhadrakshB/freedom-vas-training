@@ -73,5 +73,10 @@ export const AGENT_CONFIGS: Record<string, AgentConfig> = {
     temperature: 0.3,
     maxTokens: 1024,
     model: "gemini-1.5-flash"
+  },
+  chatAgent: {
+    temperature: 0.6,
+    maxTokens: 1024,
+    model: "gemini-1.5-flash"
   }
 };

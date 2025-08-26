@@ -17,11 +17,11 @@ export class PineconeService implements IPineconeService {
   private indexName: string;
   private index: any;
 
-  constructor(apiKey?: string, indexName: string = 'ai-training-simulator') {
+  constructor(apiKey?: string, indexName: string = 'quickstart') {
     this.client = new Pinecone({
       apiKey: apiKey || process.env.PINECONE_API_KEY || ''
     });
-    this.indexName = indexName;
+    this.indexName = "quickstart";
   }
 
   /**
