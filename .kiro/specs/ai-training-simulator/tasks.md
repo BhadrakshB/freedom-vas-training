@@ -13,7 +13,7 @@
   - Write unit tests for Pinecone integration functions
   - _Requirements: 6.1, 6.2, 6.5_
 
-- [ ] 3. Create Scenario Creator Agent
+- [x] 3. Create Scenario Creator Agent
   - Implement scenario creation node with RAG integration
   - Add SOP retrieval logic for grounding scenarios in company policies
   - Create JSON schema validation for scenario output

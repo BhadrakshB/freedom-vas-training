@@ -40,5 +40,15 @@ export {
   validateSessionData,
   createEmptyScenario,
   createEmptyPersona,
-  createEmptyScoring
+  createEmptyScoring,
+  validateScenarioAgainstSchema,
+  SCENARIO_JSON_SCHEMA
 } from './validation';
+
+// Agents
+export {
+  ScenarioCreatorAgent,
+  createScenarioCreatorAgent,
+  type ScenarioCreationInput,
+  type ScenarioCreationOutput
+} from './agents/scenario-creator';

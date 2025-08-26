@@ -100,3 +100,95 @@ export function createEmptyScoring(): ScoringMetrics {
     time_efficiency: 0
   };
 }
+
+/** JSON Schema validation for scenario output */
+
+export const SCENARIO_JSON_SCHEMA = {
+  type: 'object',
+  required: ['title', 'description', 'required_steps', 'critical_errors', 'time_pressure'],
+  properties: {
+    title: {
+      type: 'string',
+      minLength: 1,
+      maxLength: 200
+    },
+    description: {
+      type: 'string',
+      minLength: 10,
+      maxLength: 2000
+    },
+    required_steps: {
+      type: 'array',
+      items: {
+        type: 'string',
+        minLength: 1
+      },
+      minItems: 1,
+      maxItems: 20
+    },
+    critical_errors: {
+      type: 'array',
+      items: {
+        type: 'string',
+        minLength: 1
+      },
+      minItems: 1,
+      maxItems: 15
+    },
+    time_pressure: {
+      type: 'number',
+      minimum: 1,
+      maximum: 10
+    }
+  },
+  additionalProperties: false
+} as const;
+
+/**
+ * Validate scenario data against JSON schema
+ */
+export function validateScenarioAgainstSchema(data: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // Check required fields
+  const requiredFields = ['title', 'description', 'required_steps', 'critical_errors', 'time_pressure'];
+  for (const field of requiredFields) {
+    if (!(field in data)) {
+      errors.push(`Missing required field: ${field}`);
+    }
+  }
+
+  // Validate title
+  if (typeof data.title !== 'string' || data.title.length === 0 || data.title.length > 200) {
+    errors.push('Title must be a non-empty string with max 200 characters');
+  }
+
+  // Validate description
+  if (typeof data.description !== 'string' || data.description.length < 10 || data.description.length > 2000) {
+    errors.push('Description must be a string between 10 and 2000 characters');
+  }
+
+  // Validate required_steps
+  if (!Array.isArray(data.required_steps) || data.required_steps.length === 0 || data.required_steps.length > 20) {
+    errors.push('Required steps must be an array with 1-20 items');
+  } else if (!data.required_steps.every((step: any) => typeof step === 'string' && step.length > 0)) {
+    errors.push('All required steps must be non-empty strings');
+  }
+
+  // Validate critical_errors
+  if (!Array.isArray(data.critical_errors) || data.critical_errors.length === 0 || data.critical_errors.length > 15) {
+    errors.push('Critical errors must be an array with 1-15 items');
+  } else if (!data.critical_errors.every((error: any) => typeof error === 'string' && error.length > 0)) {
+    errors.push('All critical errors must be non-empty strings');
+  }
+
+  // Validate time_pressure
+  if (typeof data.time_pressure !== 'number' || data.time_pressure < 1 || data.time_pressure > 10) {
+    errors.push('Time pressure must be a number between 1 and 10');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
