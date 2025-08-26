@@ -209,7 +209,7 @@ Provide your analysis:`;
     
     const evidence: ScoringEvidence = {
       policy_adherence: { score: 50, evidence: [], violations: [] },
-      empathy_index: { score: 50, evidence: [], violations: [] },
+      empathy_index: { score: 50, evidence: [], missed_opportunities: [] },
       completeness: { score: 50, evidence: [], missing_elements: [] },
       escalation_judgment: { score: 50, evidence: [], inappropriate_actions: [] },
       time_efficiency: { score: 50, evidence: [], inefficiencies: [] }
