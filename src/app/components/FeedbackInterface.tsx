@@ -1,8 +1,20 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { FeedbackDisplay } from './FeedbackDisplay';
-import { FeedbackOutput } from '../lib/agents/feedback-generator';
+import { FeedbackOutput } from '../lib/types';
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardFooter, 
+  CardHeader, 
+  CardTitle,
+  Button,
+  Skeleton
+} from './ui';
+import { ErrorAlert } from './ErrorAlert';
+import { classifyError } from '../lib/error-handling';
 
 interface FeedbackInterfaceProps {
   sessionId: string;
@@ -26,13 +38,15 @@ export const FeedbackInterface: React.FC<FeedbackInterfaceProps> = ({
     feedback: null,
     error: null
   });
+  const [exportLoading, setExportLoading] = useState<{
+    session: boolean;
+    feedback: boolean;
+  }>({
+    session: false,
+    feedback: false
+  });
 
-  // Fetch feedback when component mounts
-  useEffect(() => {
-    fetchFeedback();
-  }, [sessionId]);
-
-  const fetchFeedback = async () => {
+  const fetchFeedback = useCallback(async () => {
     try {
       setFeedbackState(prev => ({ ...prev, loading: true, error: null }));
 
@@ -53,16 +67,23 @@ export const FeedbackInterface: React.FC<FeedbackInterfaceProps> = ({
       });
     } catch (error) {
       console.error('Error fetching feedback:', error);
+      const appError = classifyError(error);
       setFeedbackState({
         loading: false,
         feedback: null,
-        error: error instanceof Error ? error.message : 'Failed to load feedback'
+        error: appError.message
       });
     }
-  };
+  }, [sessionId]);
+
+  // Fetch feedback when component mounts
+  useEffect(() => {
+    fetchFeedback();
+  }, [fetchFeedback]);
 
   const handleExportSession = async () => {
     try {
+      setExportLoading(prev => ({ ...prev, session: true }));
       const response = await fetch(`/api/training/export?sessionId=${sessionId}&type=session`);
       if (response.ok) {
         const blob = await response.blob();
@@ -74,14 +95,20 @@ export const FeedbackInterface: React.FC<FeedbackInterfaceProps> = ({
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+      } else {
+        throw new Error('Export failed');
       }
     } catch (error) {
       console.error('Failed to export session:', error);
+      // Could add toast notification here
+    } finally {
+      setExportLoading(prev => ({ ...prev, session: false }));
     }
   };
 
   const handleExportFeedback = async () => {
     try {
+      setExportLoading(prev => ({ ...prev, feedback: true }));
       const response = await fetch(`/api/training/export?sessionId=${sessionId}&type=feedback`);
       if (response.ok) {
         const blob = await response.blob();
@@ -93,111 +120,153 @@ export const FeedbackInterface: React.FC<FeedbackInterfaceProps> = ({
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+      } else {
+        throw new Error('Export failed');
       }
     } catch (error) {
       console.error('Failed to export feedback:', error);
+      // Could add toast notification here
+    } finally {
+      setExportLoading(prev => ({ ...prev, feedback: false }));
     }
   };
 
   if (feedbackState.loading) {
     return (
-      <div className={`flex flex-col items-center justify-center min-h-96 ${className}`}>
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Generating Your Feedback</h2>
-        <p className="text-gray-600 text-center max-w-md">
-          Our AI is analyzing your training session performance and preparing detailed feedback with actionable recommendations.
-        </p>
-      </div>
+      <Card className={`min-h-96 ${className}`}>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <div className="space-y-4 w-full max-w-md">
+            <Skeleton className="h-12 w-12 rounded-full mx-auto" />
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-3/4 mx-auto" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6 mx-auto" />
+            </div>
+          </div>
+          <div className="mt-6 text-center">
+            <CardTitle className="text-xl mb-2">Generating Your Feedback</CardTitle>
+            <CardDescription className="max-w-md">
+              Our AI is analyzing your training session performance and preparing detailed feedback with actionable recommendations.
+            </CardDescription>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   if (feedbackState.error) {
     return (
-      <div className={`flex flex-col items-center justify-center min-h-96 ${className}`}>
-        <div className="text-red-500 text-4xl mb-4">⚠️</div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Feedback Generation Failed</h2>
-        <p className="text-gray-600 text-center max-w-md mb-4">{feedbackState.error}</p>
-        <button
-          onClick={fetchFeedback}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          Try Again
-        </button>
-      </div>
+      <Card className={`min-h-96 ${className}`}>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <ErrorAlert
+            error={{
+              type: 'server',
+              severity: 'high',
+              message: 'Feedback Generation Failed',
+              details: feedbackState.error,
+              timestamp: new Date()
+            }}
+            onRetry={fetchFeedback}
+            className="mb-6 max-w-md"
+            showDetails={true}
+          />
+        </CardContent>
+      </Card>
     );
   }
 
   if (!feedbackState.feedback) {
     return (
-      <div className={`flex flex-col items-center justify-center min-h-96 ${className}`}>
-        <div className="text-gray-400 text-4xl mb-4">📝</div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">No Feedback Available</h2>
-        <p className="text-gray-600 text-center max-w-md">
-          Feedback could not be generated for this session. Please try again or contact support.
-        </p>
-      </div>
+      <Card className={`min-h-96 ${className}`}>
+        <CardContent className="flex flex-col items-center justify-center p-8">
+          <div className="text-muted-foreground text-4xl mb-4">📝</div>
+          <CardTitle className="text-xl mb-2">No Feedback Available</CardTitle>
+          <CardDescription className="text-center max-w-md">
+            Feedback could not be generated for this session. Please try again or contact support.
+          </CardDescription>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className={className}>
+    <Card className={className}>
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10">
+      <CardHeader className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Training Session Feedback</h1>
-            <p className="text-sm text-gray-600">Session ID: {sessionId}</p>
+            <CardTitle className="text-2xl">Training Session Feedback</CardTitle>
+            <CardDescription>Session ID: {sessionId}</CardDescription>
           </div>
           
-          <div className="flex items-center space-x-3">
-            <button
+          <div className="flex items-center space-x-2">
+            <Button
               onClick={handleExportSession}
-              className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+              variant="secondary"
+              size="sm"
+              disabled={exportLoading.session}
             >
-              Export Session
-            </button>
-            <button
+              {exportLoading.session ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current"></div>
+                  Exporting...
+                </div>
+              ) : (
+                "Export Session"
+              )}
+            </Button>
+            <Button
               onClick={handleExportFeedback}
-              className="px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
+              variant="secondary"
+              size="sm"
+              disabled={exportLoading.feedback}
             >
-              Export Feedback
-            </button>
+              {exportLoading.feedback ? (
+                <div className="flex items-center gap-2">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current"></div>
+                  Exporting...
+                </div>
+              ) : (
+                "Export Feedback"
+              )}
+            </Button>
             {onClose && (
-              <button
+              <Button
                 onClick={onClose}
-                className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
+                variant="outline"
+                size="sm"
+                disabled={exportLoading.session || exportLoading.feedback}
               >
                 Close
-              </button>
+              </Button>
             )}
           </div>
         </div>
-      </div>
+      </CardHeader>
 
       {/* Feedback Content */}
-      <div className="p-6">
+      <CardContent className="p-6">
         <FeedbackDisplay 
           feedback={feedbackState.feedback} 
           sessionId={sessionId}
+          loading={feedbackState.loading}
         />
-      </div>
+      </CardContent>
 
       {/* Footer Actions */}
-      <div className="bg-white border-t border-gray-200 p-4 sticky bottom-0">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-600">
+      <CardFooter className="sticky bottom-0 bg-background border-t">
+        <div className="flex items-center justify-between w-full">
+          <CardDescription className="text-sm">
             Review your feedback and use the recommendations to improve your performance in future sessions.
-          </div>
-          <div className="flex space-x-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-            >
-              Start New Session
-            </button>
-          </div>
+          </CardDescription>
+          <Button
+            onClick={() => window.location.reload()}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            Start New Session
+          </Button>
         </div>
-      </div>
-    </div>
+      </CardFooter>
+    </Card>
   );
 };

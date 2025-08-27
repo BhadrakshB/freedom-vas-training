@@ -1,46 +1,41 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TrainingProvider, useTraining } from "./contexts/TrainingContext";
 import { TrainingPanel } from "./components/TrainingPanel";
 import { FeedbackInterface } from "./components/FeedbackInterface";
+import { ThemeToggle } from "./components/ThemeToggle";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { Badge } from "./components/ui/badge";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
+import { Skeleton } from "./components/ui/skeleton";
+import { ErrorAlert } from "./components/ErrorAlert";
+import { Maximize2, Minimize2, X, Eye, EyeOff } from "lucide-react";
+import { Alert, AlertDescription } from "./components/ui";
 
 interface ChatRequest {
   message: string;
   userId?: string;
-  context?: 'general' | 'performance_review' | 'training_advice' | 'session_analysis';
+  context?:
+    | "general"
+    | "performance_review"
+    | "training_advice"
+    | "session_analysis";
   conversationHistory?: Array<{
-    role: 'user' | 'assistant';
+    role: "user" | "assistant";
     content: string;
     timestamp?: string;
   }>;
 }
 
-interface ChatResponse {
-  response: string;
-  suggestedActions?: string[];
-  sessionReferences?: string[];
-  performanceInsights?: {
-    totalSessions: number;
-    averageScore: number;
-    strongestSkill: string;
-    improvementArea: string;
-    recentTrend: 'improving' | 'declining' | 'stable';
-    recommendations: string[];
-  };
-  error?: string;
-}
-
-
 // Main content component that uses the training context
 function MainContent() {
-
   const {
     state,
     startSession,
     completeSession,
     enterFeedbackPhase,
     exitFeedbackPhase,
-    updateSessionData,
     setError,
     setLoading,
     isTrainingActive,
@@ -49,24 +44,84 @@ function MainContent() {
   } = useTraining();
 
   const [input, setInput] = useState("");
-  const [resp, setResp] = useState<any>(null);
-  const [panelMode, setPanelMode] = useState<'hidden' | 'half' | 'full'>('hidden');
+  const [resp, setResp] = useState<{ response?: string } | null>(null);
+  const [panelMode, setPanelMode] = useState<"hidden" | "half" | "full">(
+    "hidden"
+  );
+  const [conversationHistory, setConversationHistory] = useState<
+    Array<{
+      role: "user" | "assistant";
+      content: string;
+      timestamp: string;
+    }>
+  >([]);
+  const conversationEndRef = useRef<HTMLDivElement>(null);
 
   async function run() {
+    if (!input.trim()) return;
+
+    const currentInput = input;
+    const timestamp = new Date().toISOString();
+
+    // Add user message to conversation history
+    const userMessage = {
+      role: "user" as const,
+      content: currentInput,
+      timestamp,
+    };
+
+    setConversationHistory((prev) => [...prev, userMessage]);
+    setInput("");
     setLoading(true);
     setResp(null);
-    const r = await fetch("/api/chat", {
-      method: "POST",
-      body: JSON.stringify({
-        message: input,
-        userId: "anonymous",
-        context: "general"
-      } as ChatRequest),
-      headers: { "Content-Type": "application/json" },
-    });
-    const j = await r.json();
-    setResp(j);
-    setLoading(false);
+
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          message: currentInput,
+          userId: "anonymous",
+          context: "general",
+          conversationHistory: conversationHistory,
+        } as ChatRequest),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!r.ok) {
+        throw new Error(`HTTP error! status: ${r.status}`);
+      }
+
+      const j = await r.json();
+      const assistantResponse =
+        j.response ||
+        "Sorry, I encountered an error processing your request. Please try again.";
+
+      // Add assistant response to conversation history
+      const assistantMessage = {
+        role: "assistant" as const,
+        content: assistantResponse,
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversationHistory((prev) => [...prev, assistantMessage]);
+      setResp(j);
+    } catch (error) {
+      console.error("Chat error:", error);
+      const errorResponse =
+        "Sorry, I encountered an error processing your request. Please try again.";
+
+      // Add error response to conversation history
+      const errorMessage = {
+        role: "assistant" as const,
+        content: errorResponse,
+        timestamp: new Date().toISOString(),
+      };
+
+      setConversationHistory((prev) => [...prev, errorMessage]);
+      setResp({ response: errorResponse });
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function startTrainingSession() {
@@ -78,8 +133,8 @@ function MainContent() {
         body: JSON.stringify({
           difficulty: "beginner",
           category: "general",
-          trainingObjective: "To test new guy"
-        })
+          trainingObjective: "To test new guy",
+        }),
       });
 
       if (response.ok) {
@@ -90,7 +145,7 @@ function MainContent() {
       }
     } catch (error) {
       console.error("Failed to start training session:", error);
-      setError(error instanceof Error ? error.message : "Failed to start training session");
+      setError(error);
     } finally {
       setLoading(false);
     }
@@ -106,7 +161,7 @@ function MainContent() {
         body: JSON.stringify({
           sessionId: state.activeSessionId,
           userResponse: message,
-        })
+        }),
       });
 
       if (!response.ok) {
@@ -124,11 +179,13 @@ function MainContent() {
 
     const checkSessionStatus = async () => {
       try {
-        const response = await fetch(`/api/training/status?sessionId=${state.activeSessionId}`);
+        const response = await fetch(
+          `/api/training/status?sessionId=${state.activeSessionId}`
+        );
         if (response.ok) {
           const data = await response.json();
-          if (data.sessionStatus === 'complete' && !state.showFeedback) {
-            completeSession(state.activeSessionId ?? '');
+          if (data.sessionStatus === "complete" && !state.showFeedback) {
+            completeSession(state.activeSessionId ?? "");
             // Small delay to allow UI to update before entering feedback phase
             setTimeout(() => {
               enterFeedbackPhase(state.activeSessionId!);
@@ -137,13 +194,26 @@ function MainContent() {
         }
       } catch (error) {
         console.error("Failed to check session status:", error);
-        setError("Failed to check session status");
+        // Only set error if it's not a network timeout (to avoid spam during normal polling)
+        if (error instanceof Error && !error.message.includes("fetch")) {
+          setError(error);
+        }
       }
     };
 
+    // Initial check
+    checkSessionStatus();
+
+    // Set up polling interval
     const interval = setInterval(checkSessionStatus, 3000); // Check every 3 seconds
     return () => clearInterval(interval);
-  }, [state.activeSessionId, state.showFeedback, completeSession, enterFeedbackPhase, setError]);
+  }, [
+    state.activeSessionId,
+    state.showFeedback,
+    completeSession,
+    enterFeedbackPhase,
+    setError,
+  ]);
 
   const handleCloseFeedback = () => {
     exitFeedbackPhase();
@@ -154,69 +224,123 @@ function MainContent() {
     startTrainingSession();
   };
 
+  const clearConversation = () => {
+    setConversationHistory([]);
+    setResp(null);
+  };
+
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversationHistory]);
+
   const getPanelClasses = () => {
-    const baseClasses = "fixed right-4 top-4 bg-white shadow-2xl rounded-lg border border-gray-200 z-50 transition-all duration-300 ease-in-out";
+    const baseClasses =
+      "fixed right-2 top-2 md:right-4 md:top-4 z-50 transition-all duration-300 ease-in-out shadow-lg";
 
     switch (panelMode) {
-      case 'full':
-        return `${baseClasses} w-[calc(100vw-2rem)] h-[calc(100vh-2rem)]`;
-      case 'half':
-        return `${baseClasses} w-96 h-[calc(100vh-2rem)]`;
-      case 'hidden':
+      case "full":
+        return `${baseClasses} w-[calc(100vw-1rem)] md:w-[calc(100vw-2rem)] h-[calc(100vh-1rem)] md:h-[calc(100vh-2rem)]`;
+      case "half":
+        return `${baseClasses} w-80 md:w-96 h-[calc(100vh-1rem)] md:h-[calc(100vh-2rem)]`;
+      case "hidden":
       default:
-        return `${baseClasses} w-96 h-[calc(100vh-2rem)] translate-x-full opacity-0 pointer-events-none`;
+        return `${baseClasses} w-80 md:w-96 h-[calc(100vh-1rem)] md:h-[calc(100vh-2rem)] translate-x-full opacity-0 pointer-events-none`;
     }
   };
 
   return (
     <div className="relative h-screen">
       {/* Main Chat Area - Full Width */}
-      <main className={`w-full h-full flex flex-col transition-all duration-300 ${isTrainingActive ? 'bg-blue-50' : isFeedbackActive ? 'bg-green-50' : 'bg-white'
-        }`}>
+      <main
+        className={`w-full h-full flex flex-col transition-all duration-300 ${
+          isTrainingActive
+            ? "bg-blue-50/50 dark:bg-blue-950/20"
+            : isFeedbackActive
+            ? "bg-green-50/50 dark:bg-green-950/20"
+            : "bg-background"
+        }`}
+      >
         {/* Header with visual distinction */}
-        <div className={`border-b p-4 ${isTrainingActive
-          ? 'bg-blue-100 border-blue-200'
-          : isFeedbackActive
-            ? 'bg-green-100 border-green-200'
-            : 'bg-gray-50 border-gray-200'
-          }`}>
-          <div className="flex items-center justify-between">
-            <h1 className={`text-2xl font-semibold ${isTrainingActive
-              ? 'text-blue-900'
+        <Card
+          className={`rounded-none border-x-0 border-t-0 transition-colors duration-300 ${
+            isTrainingActive
+              ? "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800"
               : isFeedbackActive
-                ? 'text-green-900'
-                : 'text-gray-900'
-              }`}>
-              AI Training Simulator
-            </h1>
-
-            {/* Controls */}
-            <div className="flex items-center gap-3">
-              {/* Phase indicator */}
-              <div className={`px-3 py-1 rounded-full text-sm font-medium ${isTrainingActive
-                ? 'bg-blue-200 text-blue-800'
-                : isFeedbackActive
-                  ? 'bg-green-200 text-green-800'
-                  : 'bg-gray-200 text-gray-800'
-                }`}>
-                {state.phase === 'training' ? 'Training Active' :
-                  state.phase === 'feedback' ? 'Feedback Phase' :
-                    state.phase === 'complete' ? 'Session Complete' : 'Ready'}
-              </div>
-
-              {/* Training Panel Toggle */}
-              <button
-                onClick={() => setPanelMode(panelMode === 'hidden' ? 'half' : 'hidden')}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${panelMode !== 'hidden'
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
+              ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800"
+              : "bg-background"
+          }`}
+        >
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <CardTitle
+                className={`text-xl md:text-2xl transition-colors duration-300 ${
+                  isTrainingActive
+                    ? "text-blue-900 dark:text-blue-100"
+                    : isFeedbackActive
+                    ? "text-green-900 dark:text-green-100"
+                    : "text-foreground"
+                }`}
               >
-                {panelMode !== 'hidden' ? 'Hide Training Panel' : 'Show Training Panel'}
-              </button>
+                AI Training Simulator
+              </CardTitle>
+
+              {/* Controls */}
+              <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+                {/* Theme Toggle */}
+                <ThemeToggle />
+
+                {/* Phase indicator */}
+                <Badge
+                  variant={
+                    isTrainingActive
+                      ? "default"
+                      : isFeedbackActive
+                      ? "secondary"
+                      : "outline"
+                  }
+                  className={`text-xs md:text-sm ${
+                    isTrainingActive
+                      ? "bg-blue-600 hover:bg-blue-700"
+                      : isFeedbackActive
+                      ? "bg-green-600 hover:bg-green-700 text-white"
+                      : ""
+                  }`}
+                >
+                  {state.phase === "training"
+                    ? "Training Active"
+                    : state.phase === "feedback"
+                    ? "Feedback Phase"
+                    : state.phase === "complete"
+                    ? "Session Complete"
+                    : "Ready"}
+                </Badge>
+
+                {/* Training Panel Toggle */}
+                <Button
+                  variant={panelMode !== "hidden" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() =>
+                    setPanelMode(panelMode === "hidden" ? "half" : "hidden")
+                  }
+                  className="gap-2"
+                >
+                  {panelMode !== "hidden" ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {panelMode !== "hidden" ? "Hide Panel" : "Show Panel"}
+                  </span>
+                  <span className="sm:hidden">
+                    {panelMode !== "hidden" ? "Hide" : "Show"}
+                  </span>
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
+          </CardHeader>
+        </Card>
 
         {/* Main content area */}
         <div className="flex-1 overflow-auto">
@@ -227,81 +351,218 @@ function MainContent() {
               className="h-full"
             />
           ) : (
-            <div className="p-6 max-w-2xl mx-auto space-y-4">
+            <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
+              {/* Session starting loading state */}
+              {isLoading &&
+                !isTrainingActive &&
+                !isFeedbackActive &&
+                state.phase === "idle" && (
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <AlertDescription className="text-center">
+                      <div className="space-y-3">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                        <div className="font-semibold text-blue-900 text-lg">
+                          Starting Training Session
+                        </div>
+                        <p className="text-blue-800">
+                          Creating your personalized training scenario...
+                        </p>
+                        <div className="space-y-2 max-w-md mx-auto">
+                          <Skeleton className="h-3 w-full" />
+                          <Skeleton className="h-3 w-3/4 mx-auto" />
+                          <Skeleton className="h-3 w-1/2 mx-auto" />
+                        </div>
+                        <p className="text-sm text-blue-700">
+                          This may take a few moments...
+                        </p>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
               {isTrainingActive ? (
-                <div className="bg-blue-100 border border-blue-300 rounded-lg p-6">
+                <Alert className="border-blue-200 bg-blue-50">
                   <div className="flex items-center">
                     <div className="w-4 h-4 bg-blue-500 rounded-full animate-pulse mr-4"></div>
-                    <div>
-                      <h3 className="font-semibold text-blue-900 text-lg mb-2">Training Session in Progress</h3>
-                      <p className="text-blue-800">
-                        Use the training panel on the right to interact with your guest.
-                        This main area will display your detailed feedback once the session is complete.
-                      </p>
-                      {state.scenario && (
-                        <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
-                          <p className="text-sm text-blue-700">
-                            <strong>Current Scenario:</strong> {state.scenario.title}
-                          </p>
+                    <div className="flex-1">
+                      <AlertDescription className="text-blue-900">
+                        <div className="font-semibold text-lg mb-2">
+                          Training Session in Progress
                         </div>
-                      )}
+                        <p className="text-blue-800 mb-3">
+                          Use the training panel on the right to interact with
+                          your guest. This main area will display your detailed
+                          feedback once the session is complete.
+                        </p>
+                        {state.scenario && (
+                          <Card className="bg-blue-100 border-blue-200">
+                            <CardContent className="pt-3">
+                              <p className="text-sm text-blue-700">
+                                <strong>Current Scenario:</strong>{" "}
+                                {state.scenario.title}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </AlertDescription>
                     </div>
                   </div>
-                </div>
-              ) : state.phase === 'complete' ? (
-                <div className="bg-green-100 border border-green-300 rounded-lg p-6 text-center">
-                  <div className="text-green-600 text-4xl mb-4">🎉</div>
-                  <h3 className="font-semibold text-green-900 text-lg mb-2">Session Complete!</h3>
-                  <p className="text-green-800 mb-4">
-                    Your training session has been completed. Generating detailed feedback...
-                  </p>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-                </div>
+                </Alert>
+              ) : state.phase === "complete" ? (
+                <Alert className="border-green-200 bg-green-50">
+                  <AlertDescription className="text-center">
+                    <div className="text-green-600 text-4xl mb-4">🎉</div>
+                    <div className="font-semibold text-green-900 text-lg mb-2">
+                      Session Complete!
+                    </div>
+                    <p className="text-green-800 mb-4">
+                      Your training session has been completed. Generating
+                      detailed feedback...
+                    </p>
+                    <div className="space-y-3">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                      <div className="space-y-2 max-w-md mx-auto">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-3/4 mx-auto" />
+                        <Skeleton className="h-3 w-1/2 mx-auto" />
+                      </div>
+                      <p className="text-sm text-green-700">
+                        Analyzing performance and generating recommendations...
+                      </p>
+                    </div>
+                  </AlertDescription>
+                </Alert>
               ) : (
                 <>
-                  <div className="text-center mb-6">
-                    <p className="text-gray-600 mb-4">
-                      Welcome to the AI Training Simulator. Start a training session to practice your skills,
-                      or use the general assistant below.
-                    </p>
-                  </div>
+                  <Card>
+                    <CardContent className="pt-6 text-center">
+                      <p className="text-muted-foreground mb-4">
+                        Welcome to the AI Training Simulator. Start a training
+                        session to practice your skills, or use the general
+                        assistant below.
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                  <div className="flex gap-2">
-                    <input
-                      className="border rounded px-3 py-2 flex-1 text-black"
-                      placeholder="Describe a task..."
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      disabled={isTrainingActive}
-                    />
-                    <button
-                      onClick={run}
-                      disabled={isLoading || isTrainingActive}
-                      className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
-                    >
-                      {isLoading ? "Thinking..." : "Run"}
-                    </button>
-                  </div>
+                  {/* Conversation History */}
+                  {conversationHistory.length > 0 && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">
+                            Conversation
+                          </CardTitle>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={clearConversation}
+                            disabled={isLoading}
+                          >
+                            Clear
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4 max-h-96 overflow-y-auto">
+                        {conversationHistory.map((message, index) => (
+                          <div
+                            key={index}
+                            className={`flex ${
+                              message.role === "user"
+                                ? "justify-end"
+                                : "justify-start"
+                            }`}
+                          >
+                            <div
+                              className={`max-w-[80%] rounded-lg px-4 py-2 ${
+                                message.role === "user"
+                                  ? "bg-blue-500 text-white ml-4"
+                                  : "bg-muted text-foreground mr-4"
+                              }`}
+                            >
+                              <div className="whitespace-pre-wrap text-sm">
+                                {message.content}
+                              </div>
+                              <div
+                                className={`text-xs mt-1 opacity-70 ${
+                                  message.role === "user"
+                                    ? "text-blue-100"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                {new Date(
+                                  message.timestamp
+                                ).toLocaleTimeString()}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div ref={conversationEndRef} />
+                      </CardContent>
+                    </Card>
+                  )}
 
-                  {resp && (
-                    <div className="rounded border p-4 space-y-2">
-                      <pre className="whitespace-pre-wrap text-black">{String(resp.response ?? "")}</pre>
-                    </div>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Describe a task..."
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          disabled={isTrainingActive || isLoading}
+                          className="flex-1"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              run();
+                            }
+                          }}
+                        />
+                        <Button
+                          onClick={run}
+                          disabled={
+                            isLoading || isTrainingActive || !input.trim()
+                          }
+                        >
+                          {isLoading ? (
+                            <div className="flex items-center gap-2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                              Thinking...
+                            </div>
+                          ) : (
+                            "Send"
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Loading state for response */}
+                  {isLoading && (
+                    <Card>
+                      <CardContent className="pt-6 space-y-3">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                          <span>Processing your request...</span>
+                        </div>
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-1/2" />
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
                 </>
               )}
 
               {/* Error display */}
               {state.error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <div className="text-red-500 mr-3">⚠️</div>
-                    <div>
-                      <h3 className="font-medium text-red-900">Error</h3>
-                      <p className="text-sm text-red-700">{state.error}</p>
-                    </div>
-                  </div>
-                </div>
+                <ErrorAlert
+                  error={state.error}
+                  onRetry={() => window.location.reload()}
+                  onDismiss={() => setError(undefined)}
+                  className="mb-4"
+                />
               )}
             </div>
           )}
@@ -309,55 +570,59 @@ function MainContent() {
       </main>
 
       {/* Floating Training Panel */}
-      {panelMode !== 'hidden' && (
-        <div className={getPanelClasses()}>
+      {panelMode !== "hidden" && (
+        <Card className={getPanelClasses()}>
           {/* Panel Header with Controls */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-gray-50 rounded-t-lg">
-            <h3 className="font-semibold text-gray-900">Training Panel</h3>
-            <div className="flex items-center gap-2">
-              {/* Size Toggle Buttons */}
-              <button
-                onClick={() => setPanelMode(panelMode === 'half' ? 'full' : 'half')}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
-                title={panelMode === 'half' ? 'Expand to fullscreen' : 'Minimize to half screen'}
-              >
-                {panelMode === 'half' ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.5 3.5M15 9h4.5M15 9V4.5M15 9l5.5-5.5M9 15v4.5M9 15H4.5M9 15l-5.5 5.5M15 15h4.5M15 15v4.5m0-4.5l5.5 5.5" />
-                  </svg>
-                )}
-              </button>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Training Panel</CardTitle>
+              <div className="flex items-center gap-2">
+                {/* Size Toggle Buttons */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() =>
+                    setPanelMode(panelMode === "half" ? "full" : "half")
+                  }
+                  title={
+                    panelMode === "half"
+                      ? "Expand to fullscreen"
+                      : "Minimize to half screen"
+                  }
+                  className="h-8 w-8"
+                >
+                  {panelMode === "half" ? (
+                    <Maximize2 className="h-4 w-4" />
+                  ) : (
+                    <Minimize2 className="h-4 w-4" />
+                  )}
+                </Button>
 
-              {/* Close Button */}
-              <button
-                onClick={() => setPanelMode('hidden')}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
-                title="Close panel"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                {/* Close Button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPanelMode("hidden")}
+                  title="Close panel"
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
+          </CardHeader>
 
           {/* Panel Content */}
-          <div className="flex-1 overflow-hidden">
+          <CardContent className="flex-1 overflow-hidden p-0">
             <TrainingPanel
               sessionId={state.activeSessionId}
               onStartSession={handleStartNewSession}
               onSendMessage={sendTrainingMessage}
               className="h-full border-0 rounded-none"
             />
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       )}
-
-
     </div>
   );
 }

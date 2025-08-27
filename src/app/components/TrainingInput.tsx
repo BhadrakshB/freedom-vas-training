@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
+import { Skeleton } from './ui/skeleton';
 
 interface TrainingInputProps {
   onSendMessage: (message: string) => void;
@@ -48,10 +51,10 @@ export const TrainingInput: React.FC<TrainingInputProps> = ({
   const isSubmitDisabled = !message.trim() || disabled || loading;
 
   return (
-    <div className={`p-4 border-t border-gray-100 bg-gray-50 ${className}`}>
+    <div className={`p-4 border-t bg-background ${className}`}>
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Character count and tips */}
-        <div className="flex justify-between items-center text-xs text-gray-500">
+        <div className="flex justify-between items-center text-xs text-muted-foreground">
           <span>
             {message.length > 0 && `${message.length} characters`}
           </span>
@@ -62,73 +65,85 @@ export const TrainingInput: React.FC<TrainingInputProps> = ({
 
         {/* Input area */}
         <div className="relative">
-          <textarea
+          <Textarea
             ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             disabled={disabled}
-            className={`w-full p-3 border border-gray-300 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-              disabled 
-                ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
-                : 'bg-white'
-            }`}
+            className="resize-none pr-12"
             rows={1}
             style={{ minHeight: '44px', maxHeight: '120px' }}
           />
           
           {/* Send button */}
-          <button
+          <Button
             type="submit"
             disabled={isSubmitDisabled}
-            className={`absolute right-2 bottom-2 p-2 rounded-md transition-colors ${
-              isSubmitDisabled
-                ? 'text-gray-400 cursor-not-allowed'
-                : 'text-blue-600 hover:bg-blue-50'
-            }`}
-            title="Send message"
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 bottom-2 h-8 w-8"
+            title={loading ? "Sending..." : "Send message"}
           >
             {loading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
             ) : (
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             )}
-          </button>
+          </Button>
         </div>
 
         {/* Quick actions */}
-        {!disabled && (
+        {!disabled && !loading && (
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setMessage("I understand. Let me help you with that.")}
-              className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              className="text-xs"
+              disabled={loading}
             >
               Acknowledge
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setMessage("Could you please provide more details about your concern?")}
-              className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              className="text-xs"
+              disabled={loading}
             >
               Ask for details
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => setMessage("Let me check our policy on this and get back to you.")}
-              className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              className="text-xs"
+              disabled={loading}
             >
               Check policy
-            </button>
+            </Button>
+          </div>
+        )}
+
+        {/* Loading state for quick actions */}
+        {loading && (
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-6 w-20" />
           </div>
         )}
 
         {/* Status messages */}
         {disabled && (
-          <div className="text-center text-sm text-gray-500">
+          <div className="text-center text-sm text-muted-foreground">
             {placeholder}
           </div>
         )}

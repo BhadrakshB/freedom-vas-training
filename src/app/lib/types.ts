@@ -134,3 +134,69 @@ export interface TrainingSimulatorState {
   currentEmotion?: string;
   turnCount: number;
 }
+
+/** Feedback System Types */
+
+export interface OverallPerformance {
+  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  score: number;
+  summary: string;
+  keyStrengths: string[];
+  primaryAreasForImprovement: string[];
+  sessionCompletion: {
+    completionRate: number;
+    stepsCompleted: number;
+    totalSteps: number;
+    criticalErrorCount: number;
+  };
+}
+
+export interface DimensionAnalysis {
+  score: number;
+  trend: 'improving' | 'declining' | 'stable';
+  strengths: string[];
+  weaknesses: string[];
+  improvementOpportunities: string[];
+}
+
+export interface DetailedAnalysis {
+  policyAdherence: DimensionAnalysis;
+  empathyIndex: DimensionAnalysis;
+  completeness: DimensionAnalysis;
+  escalationJudgment: DimensionAnalysis;
+  timeEfficiency: DimensionAnalysis;
+}
+
+export interface SOPCitation {
+  section: string;
+  content: string;
+  relevance: string;
+  applicationExample: string;
+  source: string;
+}
+
+export interface ActionableRecommendation {
+  category: 'policy' | 'communication' | 'process' | 'empathy' | 'efficiency';
+  priority: 'high' | 'medium' | 'low';
+  recommendation: string;
+  specificActions: string[];
+  expectedOutcome: string;
+  relatedSOPs: string[];
+}
+
+export interface ResourceRecommendation {
+  type: 'training_material' | 'sop_section' | 'best_practice' | 'script_template';
+  title: string;
+  description: string;
+  relevance: string;
+  source: string;
+}
+
+export interface FeedbackOutput {
+  overallPerformance: OverallPerformance;
+  detailedAnalysis: DetailedAnalysis;
+  sopCitations: SOPCitation[];
+  actionableRecommendations: ActionableRecommendation[];
+  resources: ResourceRecommendation[];
+  nextSteps: string[];
+}

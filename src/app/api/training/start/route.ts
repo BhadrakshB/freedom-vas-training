@@ -1,6 +1,7 @@
 import { getSession, saveSession } from "@/app/lib/session-manager";
 import { createTrainingWorkflow, initializeState } from "../../../lib/graph";
 import { NextResponse } from "next/server";
+import { TrainingError, ERROR_MESSAGES } from "@/app/lib/error-handling";
 
 export const runtime = "edge";
 
@@ -15,9 +16,12 @@ export async function POST(req: Request) {
       // For demo, we'll use a simple in-memory store
       const sessionData = await getSession(sessionId);
       if (!sessionData) {
-        return NextResponse.json(
-          { error: "Session not found" },
-          { status: 404 }
+        throw new TrainingError(
+          "Training session not found",
+          'client',
+          'high',
+          'SESSION_NOT_FOUND',
+          { sessionId }
         );
       }
       state = sessionData.state;
@@ -74,8 +78,25 @@ export async function POST(req: Request) {
     return NextResponse.json(response);
   } catch (error) {
     console.error("API route error:", error);
+    
+    if (error instanceof TrainingError) {
+      const statusCode = error.type === 'client' ? 404 : 500;
+      return NextResponse.json(
+        {
+          error: error.message,
+          errorType: error.type,
+          errorCode: error.code,
+          context: error.context,
+        },
+        { status: statusCode }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Failed to process training session" },
+      {
+        error: ERROR_MESSAGES.SESSION_ERROR,
+        errorType: 'server',
+      },
       { status: 500 }
     );
   }

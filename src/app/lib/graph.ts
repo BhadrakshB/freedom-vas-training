@@ -1,4 +1,4 @@
-import { StateGraph } from "@langchain/langgraph";
+import { END, START, StateGraph } from "@langchain/langgraph";
 import { TrainingState } from "./training-state";
 import { scenarioCreator } from "./agents/scenario-creator";
 import { personaGenerator } from "./agents/persona-generator";
@@ -20,8 +20,8 @@ export function createTrainingWorkflow() {
       guest_simulator: "guest_simulator",
       feedback_generator: "feedback_generator"
     })
-    .addEdge("feedback_generator", "__end__")
-    .setEntryPoint("scenario_creator");
+    .addEdge("feedback_generator", END)
+    .addEdge(START, "scenario_creator");
 
   return workflow.compile();
 }

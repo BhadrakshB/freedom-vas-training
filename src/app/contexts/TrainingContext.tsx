@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { SessionStatus, ScenarioData, PersonaData, ScoringMetrics } from '../lib/types';
+import { AppError, classifyError } from '../lib/error-handling';
 
 // Training UI State Types
 export type TrainingPhase = 'idle' | 'training' | 'feedback' | 'complete';
@@ -35,7 +36,7 @@ export interface TrainingUIState {
   startTime?: Date;
   
   // Error handling
-  error?: string;
+  error?: AppError;
   
   // UI state flags
   isLoading: boolean;
@@ -57,7 +58,7 @@ export type TrainingAction =
   | { type: 'FREEZE_PANEL' }
   | { type: 'UNFREEZE_PANEL' }
   | { type: 'SET_LOADING'; loading: boolean }
-  | { type: 'SET_ERROR'; error?: string }
+  | { type: 'SET_ERROR'; error?: AppError | string | unknown }
   | { type: 'RESET_SESSION' };
 
 // Initial state (REQUIRED FOR REDUCER)
@@ -161,7 +162,7 @@ function trainingReducer(state: TrainingUIState, action: TrainingAction): Traini
     case 'SET_ERROR':
       return {
         ...state,
-        error: action.error,
+        error: action.error ? classifyError(action.error) : undefined,
         isLoading: false,
       };
 
@@ -186,7 +187,7 @@ interface TrainingContextType {
   enterFeedbackPhase: (sessionId: string) => void;
   exitFeedbackPhase: () => void;
   updateSessionData: (data: Partial<TrainingUIState>) => void;
-  setError: (error?: string) => void;
+  setError: (error?: AppError | string | unknown) => void;
   setLoading: (loading: boolean) => void;
   resetSession: () => void;
   
@@ -234,7 +235,7 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
     dispatch({ type: 'UPDATE_SESSION_DATA', data });
   };
 
-  const setError = (error?: string) => {
+  const setError = (error?: AppError | string | unknown) => {
     dispatch({ type: 'SET_ERROR', error });
   };
 

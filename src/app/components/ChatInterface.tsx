@@ -1,6 +1,20 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+// Optimized imports - only import what's needed
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Badge } from './ui/badge';
+import { Avatar, AvatarFallback } from './ui/avatar';
+import { ScrollArea } from './ui/scroll-area';
+import { Skeleton } from './ui/skeleton';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Alert, AlertDescription } from './ui/alert';
+import { Progress } from './ui/progress';
+import { Separator } from './ui/separator';
+import { ErrorAlert } from './ErrorAlert';
+import { classifyError } from '../lib/error-handling';
 
 interface ChatMessage {
   id: string;
@@ -41,6 +55,7 @@ export default function ChatInterface({
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [context, setContext] = useState<'general' | 'performance_review' | 'training_advice' | 'session_analysis'>('general');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +83,7 @@ export default function ChatInterface({
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
+    setError(null); // Clear any previous errors
 
     try {
       const response = await fetch('/api/chat', {
@@ -105,6 +121,10 @@ export default function ChatInterface({
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Chat error:', error);
+      const appError = classifyError(error);
+      setError(appError.message);
+      
+      // Also add error message to chat for user visibility
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -117,7 +137,7 @@ export default function ChatInterface({
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -129,13 +149,7 @@ export default function ChatInterface({
     inputRef.current?.focus();
   };
 
-  const getTrendColor = (trend: string) => {
-    switch (trend) {
-      case 'improving': return 'text-green-600';
-      case 'declining': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
+
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
@@ -146,157 +160,268 @@ export default function ChatInterface({
   };
 
   return (
-    <div className={`flex flex-col h-full bg-white ${className}`}>
+    <div className={`flex flex-col h-full bg-background ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+      <div className="flex items-center justify-between p-4 border-b bg-muted/30">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Training Assistant</h2>
-          <p className="text-sm text-gray-600">Ask me about your progress, get advice, or just chat!</p>
+          <h2 className="text-lg font-semibold">Training Assistant</h2>
+          <p className="text-sm text-muted-foreground">Ask me about your progress, get advice, or just chat!</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Context Selector */}
-          <select
-            value={context}
-            onChange={(e) => setContext(e.target.value as any)}
-            className="text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="general">General Chat</option>
-            <option value="performance_review">Performance Review</option>
-            <option value="training_advice">Training Advice</option>
-            <option value="session_analysis">Session Analysis</option>
-          </select>
+          <Select value={context} onValueChange={(value) => setContext(value as 'general' | 'performance_review' | 'training_advice' | 'session_analysis')}>
+            <SelectTrigger className="w-48 text-sm">
+              <SelectValue placeholder="Select context" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="general">General Chat</SelectItem>
+              <SelectItem value="performance_review">Performance Review</SelectItem>
+              <SelectItem value="training_advice">Training Advice</SelectItem>
+              <SelectItem value="session_analysis">Session Analysis</SelectItem>
+            </SelectContent>
+          </Select>
           {onClose && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 p-1"
+              className="text-muted-foreground hover:text-foreground"
               aria-label="Close chat"
             >
               ✕
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-4">
+          {/* Error Display */}
+          {error && (
+            <ErrorAlert
+              error={error}
+              onRetry={() => setError(null)}
+              onDismiss={() => setError(null)}
+              className="mb-4"
+            />
+          )}
+          {messages.map((message) => (
             <div
-              className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                message.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-900'
-              }`}
+              key={message.id}
+              className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className="whitespace-pre-wrap">{message.content}</div>
+              {message.role === 'assistant' && (
+                <Avatar className="size-8 shrink-0">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                    AI
+                  </AvatarFallback>
+                </Avatar>
+              )}
               
-              {/* Performance Insights */}
-              {message.performanceInsights && (
-                <div className="mt-3 p-3 bg-white rounded border border-gray-200">
-                  <h4 className="font-medium text-gray-900 mb-2">📊 Your Performance Overview</h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-600">Total Sessions:</span>
-                      <span className="ml-1 font-medium">{message.performanceInsights.totalSessions}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Average Score:</span>
-                      <span className="ml-1 font-medium">{message.performanceInsights.averageScore}/100</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Strongest Skill:</span>
-                      <span className="ml-1 font-medium text-green-600">{message.performanceInsights.strongestSkill}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Improvement Area:</span>
-                      <span className="ml-1 font-medium text-orange-600">{message.performanceInsights.improvementArea}</span>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <span className="text-gray-600">Recent Trend:</span>
-                    <span className={`ml-1 font-medium ${getTrendColor(message.performanceInsights.recentTrend)}`}>
-                      {getTrendIcon(message.performanceInsights.recentTrend)} {message.performanceInsights.recentTrend}
+              <Card className={`max-w-[80%] ${
+                message.role === 'user' 
+                  ? 'bg-primary text-primary-foreground border-primary' 
+                  : 'bg-card'
+              }`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant={message.role === 'user' ? 'secondary' : 'default'} className="text-xs">
+                      {message.role === 'user' ? 'You' : 'Assistant'}
+                    </Badge>
+                    <span className="text-xs opacity-70">
+                      {message.timestamp.toLocaleTimeString()}
                     </span>
                   </div>
-                  {message.performanceInsights.recommendations.length > 0 && (
-                    <div className="mt-2">
-                      <span className="text-gray-600 text-sm">Recommendations:</span>
-                      <ul className="mt-1 text-sm text-gray-700">
-                        {message.performanceInsights.recommendations.map((rec, index) => (
-                          <li key={index} className="flex items-start">
-                            <span className="text-blue-500 mr-1">•</span>
-                            {rec}
-                          </li>
+                  <div className="whitespace-pre-wrap">{message.content}</div>
+              
+                  {/* Performance Insights */}
+                  {message.performanceInsights && (
+                    <Alert className="mt-3" role="region" aria-labelledby="performance-insights-title">
+                      <span className="text-lg" aria-hidden="true">📊</span>
+                      <AlertDescription>
+                        <Card className="border-0 shadow-none bg-transparent p-0">
+                          <CardHeader className="p-0 pb-3">
+                            <CardTitle id="performance-insights-title" className="text-base font-medium">
+                              Your Performance Overview
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="p-0 space-y-4">
+                            {/* Key Metrics Grid */}
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <div className="text-xs text-muted-foreground">Total Sessions</div>
+                                <Badge variant="secondary" className="text-sm font-medium">
+                                  {message.performanceInsights.totalSessions}
+                                </Badge>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="text-xs text-muted-foreground">Average Score</div>
+                                <div className="flex items-center gap-2">
+                                  <Progress 
+                                    value={message.performanceInsights.averageScore} 
+                                    className="h-2 flex-1"
+                                    aria-label={`Average score: ${message.performanceInsights.averageScore} out of 100`}
+                                  />
+                                  <Badge variant="outline" className="text-xs">
+                                    {message.performanceInsights.averageScore}%
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+
+                            <Separator />
+
+                            {/* Skills Assessment */}
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="space-y-1">
+                                  <div className="text-xs text-muted-foreground">Strongest Skill</div>
+                                  <Badge variant="default" className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">
+                                    ✓ {message.performanceInsights.strongestSkill}
+                                  </Badge>
+                                </div>
+                                <div className="space-y-1 text-right">
+                                  <div className="text-xs text-muted-foreground">Needs Improvement</div>
+                                  <Badge variant="outline" className="border-orange-200 text-orange-800">
+                                    ⚠ {message.performanceInsights.improvementArea}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {/* Trend Indicator */}
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Recent Trend:</span>
+                                <Badge 
+                                  variant={message.performanceInsights.recentTrend === 'improving' ? 'default' : 'outline'}
+                                  className={`text-xs ${
+                                    message.performanceInsights.recentTrend === 'improving' 
+                                      ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-100' 
+                                      : message.performanceInsights.recentTrend === 'declining'
+                                      ? 'border-red-200 text-red-800'
+                                      : 'border-blue-200 text-blue-800'
+                                  }`}
+                                  aria-label={`Performance trend: ${message.performanceInsights.recentTrend}`}
+                                >
+                                  {getTrendIcon(message.performanceInsights.recentTrend)} {message.performanceInsights.recentTrend}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {/* Recommendations */}
+                            {message.performanceInsights.recommendations.length > 0 && (
+                              <>
+                                <Separator />
+                                <div className="space-y-2">
+                                  <div className="text-xs text-muted-foreground font-medium">
+                                    Personalized Recommendations
+                                  </div>
+                                  <div className="space-y-2">
+                                    {message.performanceInsights.recommendations.map((rec, index) => (
+                                      <Alert key={index} className="py-2 px-3 bg-blue-50 border-blue-200">
+                                        <AlertDescription className="text-sm flex items-start gap-2">
+                                          <Badge variant="outline" className="text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 border-blue-300 shrink-0">
+                                            {index + 1}
+                                          </Badge>
+                                          <span className="flex-1">{rec}</span>
+                                        </AlertDescription>
+                                      </Alert>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Suggested Actions */}
+                  {message.suggestedActions && message.suggestedActions.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <div className="text-xs text-muted-foreground">Suggested follow-ups:</div>
+                      <div className="space-y-1">
+                        {message.suggestedActions.map((action, index) => (
+                          <Button
+                            key={index}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSuggestedAction(action)}
+                            className="w-full justify-start text-left h-auto p-2 text-sm font-normal"
+                          >
+                            <span className="mr-1">💡</span>
+                            {action}
+                          </Button>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
-                </div>
+                </CardContent>
+              </Card>
+              
+              {message.role === 'user' && (
+                <Avatar className="size-8 shrink-0">
+                  <AvatarFallback className="bg-muted text-muted-foreground text-sm">
+                    U
+                  </AvatarFallback>
+                </Avatar>
               )}
-
-              {/* Suggested Actions */}
-              {message.suggestedActions && message.suggestedActions.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  <div className="text-xs text-gray-500 mb-1">Suggested follow-ups:</div>
-                  {message.suggestedActions.map((action, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleSuggestedAction(action)}
-                      className="block w-full text-left text-sm bg-white bg-opacity-20 hover:bg-opacity-30 rounded px-2 py-1 transition-colors"
-                    >
-                      💡 {action}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="text-xs opacity-70 mt-1">
-                {message.timestamp.toLocaleTimeString()}
-              </div>
             </div>
-          </div>
-        ))}
-        
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-lg px-4 py-2">
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              </div>
+          ))}
+          
+          {isLoading && (
+            <div className="flex gap-3 justify-start">
+              <Avatar className="size-8 shrink-0">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                  AI
+                </AvatarFallback>
+              </Avatar>
+              
+              <Card className="max-w-[80%] bg-card">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="default" className="text-xs">
+                      Assistant
+                    </Badge>
+                    <Skeleton className="h-3 w-12" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          </div>
-        )}
-        
-        <div ref={messagesEndRef} />
-      </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
+      <div className="p-4 border-t bg-muted/30">
         <div className="flex gap-2">
-          <input
+          <Input
             ref={inputRef}
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder="Ask me about your training progress, get advice, or just chat..."
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1"
             disabled={isLoading}
           />
-          <button
+          <Button
             onClick={sendMessage}
             disabled={!inputMessage.trim() || isLoading}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-4"
           >
             Send
-          </button>
+          </Button>
         </div>
-        <div className="mt-2 text-xs text-gray-500">
+        <div className="mt-2 text-xs text-muted-foreground">
           Press Enter to send • Shift+Enter for new line
         </div>
       </div>

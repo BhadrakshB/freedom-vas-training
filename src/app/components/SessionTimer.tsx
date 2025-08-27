@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { Card, CardContent, Badge } from '@/app/components/ui';
+import { Clock } from 'lucide-react';
 
 interface SessionTimerProps {
   startTime: Date;
@@ -40,44 +42,34 @@ export const SessionTimer: React.FC<SessionTimerProps> = ({
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const getTimerColor = (): string => {
+  const getTimerVariant = (): "default" | "secondary" | "destructive" => {
     const minutes = Math.floor(elapsedTime / (1000 * 60));
     
-    if (minutes < 5) return 'text-green-600';
-    if (minutes < 10) return 'text-yellow-600';
-    return 'text-red-600';
+    if (minutes < 5) return 'default'; // Green-ish
+    if (minutes < 10) return 'secondary'; // Yellow-ish
+    return 'destructive'; // Red
   };
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <div className={`flex items-center gap-1 ${getTimerColor()}`}>
-        <svg 
-          className="w-4 h-4" 
-          fill="none" 
-          stroke="currentColor" 
-          viewBox="0 0 24 24"
+    <Card className={`w-fit ${className}`}>
+      <CardContent className="flex items-center gap-2 p-3">
+        <Badge variant={getTimerVariant()} className="flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          <span className="font-mono text-sm font-medium">
+            {formatTime(elapsedTime)}
+          </span>
+        </Badge>
+        
+        <Badge 
+          variant={isActive ? "default" : "secondary"}
+          className={`flex items-center gap-1 ${isActive ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
         >
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12,6 12,12 16,14"></polyline>
-        </svg>
-        <span className="font-mono text-sm font-medium">
-          {formatTime(elapsedTime)}
-        </span>
-      </div>
-      
-      {isActive && (
-        <div className="flex items-center gap-1 text-green-600">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-xs">Active</span>
-        </div>
-      )}
-      
-      {!isActive && (
-        <div className="flex items-center gap-1 text-gray-500">
-          <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-          <span className="text-xs">Stopped</span>
-        </div>
-      )}
-    </div>
+          <div className={`w-2 h-2 rounded-full ${isActive ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+          <span className="text-xs">
+            {isActive ? 'Active' : 'Stopped'}
+          </span>
+        </Badge>
+      </CardContent>
+    </Card>
   );
 };
