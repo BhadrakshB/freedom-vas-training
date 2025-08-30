@@ -13,26 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Alert, AlertDescription } from './ui/alert';
 import { Progress } from './ui/progress';
 import { Separator } from './ui/separator';
-import { ErrorAlert } from './ErrorAlert';
-import { classifyError } from '../lib/error-handling';
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-  suggestedActions?: string[];
-  performanceInsights?: PerformanceInsights;
-}
-
-interface PerformanceInsights {
-  totalSessions: number;
-  averageScore: number;
-  strongestSkill: string;
-  improvementArea: string;
-  recentTrend: 'improving' | 'declining' | 'stable';
-  recommendations: string[];
-}
+import { ChatLoadingIndicator } from './ChatLoadingIndicator';
+import { ChatErrorDisplay } from './ChatErrorDisplay';
+import { useChatLoading } from '../contexts/ChatLoadingContext';
+import { getChatSessionManager } from '../lib/chat-session-manager';
 
 interface ChatInterfaceProps {
   userId?: string;
@@ -45,25 +29,38 @@ export default function ChatInterface({
   className = '',
   onClose 
 }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: "Hi! I'm here to help you with your training progress and answer any questions you have. How can I assist you today?",
-      timestamp: new Date()
-    }
-  ]);
+  // Use ChatSessionManager for independent session handling
+  const chatSessionManager = getChatSessionManager();
+  const [sessionState, setSessionState] = useState(chatSessionManager.getSessionState());
   const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [context, setContext] = useState<'general' | 'performance_review' | 'training_advice' | 'session_analysis'>('general');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Use ChatLoadingContext for isolated loading state
+  const { isLoading, setLoading, setError, clearError, errorHandler, currentError } = useChatLoading();
+
+  // Initialize chat session on mount
+  useEffect(() => {
+    chatSessionManager.startSession();
+    setSessionState(chatSessionManager.getSessionState());
+  }, [chatSessionManager]);
+
+  // Update session state when it changes
+  useEffect(() => {
+    const updateSessionState = () => {
+      setSessionState(chatSessionManager.getSessionState());
+    };
+    
+    // Update session state periodically or when needed
+    const interval = setInterval(updateSessionState, 1000);
+    return () => clearInterval(interval);
+  }, [chatSessionManager]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [sessionState.conversationHistory]);
 
   // Focus input on mount
   useEffect(() => {
@@ -73,67 +70,30 @@ export default function ChatInterface({
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputMessage.trim(),
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+    const messageToSend = inputMessage.trim();
     setInputMessage('');
-    setIsLoading(true);
-    setError(null); // Clear any previous errors
+    setLoading(true, 'message-send', 'Sending your message...');
+    clearError(); // Clear any previous errors
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: inputMessage.trim(),
-          userId,
-          context,
-          conversationHistory: messages.slice(-10).map(msg => ({
-            role: msg.role,
-            content: msg.content,
-            timestamp: msg.timestamp.toISOString()
-          }))
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get response');
-      }
-
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date(),
-        suggestedActions: data.suggestedActions,
-        performanceInsights: data.performanceInsights
+      // Set the action for retry functionality
+      const sendAction = async () => {
+        await chatSessionManager.sendMessage(messageToSend, context, userId);
+        setSessionState(chatSessionManager.getSessionState());
       };
-
-      setMessages(prev => [...prev, assistantMessage]);
+      errorHandler.setLastAction(sendAction);
+      
+      // Use ChatSessionManager to send message
+      await sendAction();
     } catch (error) {
       console.error('Chat error:', error);
-      const appError = classifyError(error);
+      const appError = errorHandler.handleError(error);
       setError(appError.message);
       
-      // Also add error message to chat for user visibility
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: "I'm sorry, I encountered an error processing your message. Please try again.",
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      // Update session state to reflect the error message added by the manager
+      setSessionState(chatSessionManager.getSessionState());
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -197,16 +157,16 @@ export default function ChatInterface({
       {/* Messages */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
-          {/* Error Display */}
-          {error && (
-            <ErrorAlert
-              error={error}
-              onRetry={() => setError(null)}
-              onDismiss={() => setError(null)}
-              className="mb-4"
-            />
-          )}
-          {messages.map((message) => (
+          {/* Chat Loading Indicator */}
+          <ChatLoadingIndicator className="mb-4" />
+          
+          {/* Chat Error Display - Isolated to chat context only */}
+          <ChatErrorDisplay
+            error={currentError}
+            errorHandler={errorHandler}
+            className="mb-4"
+          />
+          {sessionState.conversationHistory.map((message) => (
             <div
               key={message.id}
               className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}

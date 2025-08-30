@@ -12,6 +12,14 @@ export { FeedbackInterface } from './FeedbackInterface';
 // Chat Components
 export { default as ChatInterface } from './ChatInterface';
 
+// Loading Indicator Components
+export { ChatLoadingIndicator } from './ChatLoadingIndicator';
+export { TrainingLoadingIndicator } from './TrainingLoadingIndicator';
+
+// Error Display Components
+export { default as ChatErrorDisplay } from './ChatErrorDisplay';
+export { default as TrainingErrorDisplay } from './TrainingErrorDisplay';
+
 // Theme Components
 export { ThemeToggle } from './ThemeToggle';
 export { ThemeVerification } from './ThemeVerification';

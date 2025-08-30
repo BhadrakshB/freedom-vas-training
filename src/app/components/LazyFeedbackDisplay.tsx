@@ -29,27 +29,8 @@ const FeedbackDisplaySkeleton = () => (
   </Card>
 );
 
-// Props interface (re-exported from FeedbackDisplay)
-interface FeedbackOutput {
-  sessionId: string;
-  overallGrade: string;
-  overallScore: number;
-  dimensionScores: Record<string, number>;
-  strengths: string[];
-  improvementAreas: string[];
-  sopCitations: Array<{
-    section: string;
-    content: string;
-    relevance: string;
-  }>;
-  actionableRecommendations: string[];
-  resourceLinks: Array<{
-    title: string;
-    url: string;
-    description: string;
-  }>;
-  nextSteps: string[];
-}
+// Import the correct interface from types
+import { FeedbackOutput } from '../lib/types';
 
 interface LazyFeedbackDisplayProps {
   feedback: FeedbackOutput;

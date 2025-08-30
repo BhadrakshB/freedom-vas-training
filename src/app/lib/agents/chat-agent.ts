@@ -97,6 +97,7 @@ export class ChatAgent {
    * Get comprehensive user analytics from session data
    */
   private async getUserAnalytics(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userId: string
   ): Promise<UserSessionAnalytics> {
     const completedSessions: CompletedSession[] = [];
@@ -652,7 +653,13 @@ Sessions This Month: ${analytics.recentActivity.sessionsThisMonth}`;
 
     if (Array.isArray(response.content)) {
       return response.content
-        .map((part: any) => (typeof part?.text === "string" ? part.text : ""))
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (typeof part === 'object' && part && 'text' in part && typeof part.text === 'string') {
+            return part.text;
+          }
+          return '';
+        })
         .join(" ")
         .trim();
     }

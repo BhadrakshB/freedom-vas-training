@@ -4,7 +4,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SessionTimer } from './SessionTimer';
 import { ProgressIndicator } from './ProgressIndicator';
 import { TrainingInput } from './TrainingInput';
+import { TrainingLoadingIndicator } from './TrainingLoadingIndicator';
 import { useTraining } from '../contexts/TrainingContext';
+import { useTrainingLoading } from '../contexts/TrainingLoadingContext';
+import { getTrainingSessionManager } from '../lib/training-session-manager';
 import { 
   Card, 
   CardContent, 
@@ -16,8 +19,7 @@ import {
   Alert,
   AlertDescription
 } from './ui';
-import { ErrorAlert } from './ErrorAlert';
-import { classifyError } from '../lib/error-handling';
+import { TrainingErrorDisplay } from './TrainingErrorDisplay';
 
 // Types for the training panel
 interface TrainingPanelProps {
@@ -69,48 +71,84 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
     state,
     updateSessionData,
     setError: setContextError,
-    setLoading: setContextLoading,
     panelTitle,
     isTrainingActive,
     isFeedbackActive,
   } = useTraining();
 
+  const {
+    setLoading: setTrainingLoading,
+    setError: setTrainingError,
+    clearError: clearTrainingError,
+    isLoading: trainingIsLoading,
+    errorHandler: trainingErrorHandler,
+    currentError: trainingCurrentError
+  } = useTrainingLoading();
+
+  // Use TrainingSessionManager for independent session handling
+  const trainingSessionManager = getTrainingSessionManager();
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 
-  // Fetch session status
+  // Fetch session status using TrainingSessionManager
   const fetchSessionStatus = useCallback(async () => {
     if (!sessionId) return;
 
+    setTrainingLoading(true, 'status-check');
     try {
-      const response = await fetch(`/api/training/status?sessionId=${sessionId}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch session status: ${response.statusText}`);
+      // Use TrainingSessionManager for independent status checking
+      await trainingSessionManager.getSessionStatus(sessionId);
+      const sessionData = trainingSessionManager.getSessionData(sessionId);
+      
+      if (sessionData) {
+        // Convert to expected format for UI
+        const statusData: SessionStatus = {
+          sessionId: sessionData.sessionId,
+          sessionStatus: sessionData.status,
+          scenario: sessionData.scenario,
+          persona: sessionData.persona,
+          progress: sessionData.progress,
+          scores: sessionData.scores,
+          sessionDuration: sessionData.sessionDuration,
+          lastActivity: new Date().toISOString(),
+          criticalErrors: sessionData.criticalErrors,
+        };
+        
+        setSessionStatus(statusData);
+        setError(null);
+        clearTrainingError();
+        
+        // Update context with session data
+        updateSessionData({
+          sessionStatus: sessionData.status,
+          scenario: sessionData.scenario,
+          persona: sessionData.persona,
+          scores: sessionData.scores,
+          progress: sessionData.progress,
+          sessionDuration: sessionData.sessionDuration,
+          criticalErrors: sessionData.criticalErrors || [],
+        });
       }
-      
-      const data = await response.json();
-      setSessionStatus(data);
-      setError(null);
-      
-      // Update context with session data
-      updateSessionData({
-        sessionStatus: data.sessionStatus,
-        scenario: data.scenario,
-        persona: data.persona,
-        scores: data.scores,
-        progress: data.progress,
-        sessionDuration: data.sessionDuration,
-        criticalErrors: data.criticalErrors || [],
-      });
+
     } catch (err) {
       console.error('Error fetching session status:', err);
-      const appError = classifyError(err);
+      
+      // Set the retry action for the error handler
+      const retryAction = async () => {
+        await fetchSessionStatus();
+      };
+      trainingErrorHandler.setLastAction(retryAction);
+      trainingErrorHandler.setSessionId(sessionId);
+      
+      const appError = trainingErrorHandler.handleError(err);
       setError(appError.message);
+      setTrainingError(appError.message);
       setContextError(err);
+    } finally {
+      setTrainingLoading(false);
     }
-  }, [sessionId, updateSessionData, setContextError]);
+  }, [sessionId, updateSessionData, setContextError, setTrainingLoading, setTrainingError, clearTrainingError, trainingErrorHandler, trainingSessionManager]);
 
   // Poll for session updates when active
   useEffect(() => {
@@ -138,24 +176,40 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
     }
   }, [sessionStatus?.sessionStatus]);
 
-  // Handle sending messages
+  // Handle sending messages using TrainingSessionManager
   const handleSendMessage = async (message: string) => {
-    if (!sessionId || !onSendMessage || state.isPanelFrozen) return;
+    if (!sessionId || state.isPanelFrozen) return;
 
-    setLoading(true);
-    setContextLoading(true);
+    setTrainingLoading(true, 'message-send');
     try {
-      await onSendMessage(message);
+      // Use TrainingSessionManager for independent message sending
+      await trainingSessionManager.sendMessage(sessionId, message);
+      
+      // Also call the parent callback if provided (for compatibility)
+      if (onSendMessage) {
+        await onSendMessage(message);
+      }
+      
       // Refresh session status after sending message
       setTimeout(fetchSessionStatus, 500);
     } catch (err) {
       console.error('Error sending message:', err);
-      const appError = classifyError(err);
+      
+      // Set the retry action for the error handler
+      const retryAction = async () => {
+        if (onSendMessage) {
+          await onSendMessage(message);
+        }
+        setTimeout(fetchSessionStatus, 500);
+      };
+      trainingErrorHandler.setLastAction(retryAction);
+      
+      const appError = trainingErrorHandler.handleError(err);
       setError(appError.message);
+      setTrainingError(appError.message);
       setContextError(err);
     } finally {
-      setLoading(false);
-      setContextLoading(false);
+      setTrainingLoading(false);
     }
   };
 
@@ -197,10 +251,10 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
             </p>
             <Button
               onClick={onStartSession}
-              disabled={state.isLoading}
+              disabled={trainingIsLoading}
               className="w-full"
             >
-              {state.isLoading ? 'Starting...' : 'Start Training Session'}
+              {trainingIsLoading ? 'Starting...' : 'Start Training Session'}
             </Button>
           </div>
         </CardContent>
@@ -212,15 +266,15 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
     return (
       <Card className={`${getPanelClassName()} ${className}`}>
         <CardContent className="flex-1 flex items-center justify-center p-6">
-          <ErrorAlert
-            error={error}
-            onRetry={() => {
+          <TrainingErrorDisplay
+            error={trainingCurrentError}
+            errorHandler={trainingErrorHandler}
+            onSessionRestart={() => {
+              // Clear error and restart session
+              trainingErrorHandler.clearError();
               setError(null);
-              if (state.activeSessionId) {
-                fetchSessionStatus();
-              }
+              onStartSession?.();
             }}
-            onDismiss={() => setError(null)}
             className="max-w-md"
           />
         </CardContent>
@@ -277,10 +331,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
         </CardContent>
         
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="text-center space-y-3">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="text-sm text-muted-foreground font-medium">Loading session...</p>
-          </div>
+          <TrainingLoadingIndicator type="status-check" />
         </div>
       </Card>
     );
@@ -360,7 +411,7 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
           completionPercentage={sessionStatus.progress.completionPercentage}
           currentTurn={sessionStatus.progress.currentTurn}
           criticalErrors={sessionStatus.criticalErrors}
-          loading={loading || state.isLoading}
+          loading={trainingIsLoading}
         />
       </CardContent>
 
@@ -418,12 +469,19 @@ export const TrainingPanel: React.FC<TrainingPanelProps> = ({
         </CardContent>
       )}
 
+      {/* Training Loading Indicator */}
+      {trainingIsLoading && (
+        <CardContent className="py-4 border-b">
+          <TrainingLoadingIndicator />
+        </CardContent>
+      )}
+
       {/* Input Area */}
       <div className="flex-1 flex flex-col">
         <TrainingInput
           onSendMessage={handleSendMessage}
-          disabled={isSessionComplete || loading || state.isPanelFrozen}
-          loading={loading || state.isLoading}
+          disabled={isSessionComplete || trainingIsLoading || state.isPanelFrozen}
+          loading={trainingIsLoading}
           placeholder={
             state.isPanelFrozen
               ? "Panel is frozen - session complete or in feedback phase"

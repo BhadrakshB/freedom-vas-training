@@ -1,6 +1,7 @@
 // Pinecone integration service for AI Training Simulator
 
 import { Pinecone } from '@pinecone-database/pinecone';
+import { createRetrieverTool } from "langchain/tools/retriever";
 import { 
   PineconeService as IPineconeService, 
   Document 
@@ -9,19 +10,26 @@ import {
   DocumentMetadata, 
   RetrievalResult, 
   MetadataFilter, 
-  VectorDocument 
 } from './types';
+
+import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
+
 
 export class PineconeService implements IPineconeService {
   private client: Pinecone;
   private indexName: string;
-  private index: any;
+  private index: ReturnType<Pinecone['index']> | null = null;
+  private embeddings: GoogleGenerativeAIEmbeddings;
 
   constructor(apiKey?: string, indexName: string = 'quickstart') {
     this.client = new Pinecone({
       apiKey: apiKey || process.env.PINECONE_API_KEY || ''
     });
-    this.indexName = "quickstart";
+    this.indexName = indexName;
+    this.embeddings = new GoogleGenerativeAIEmbeddings({
+      model: "models/embedding-001"  // Gemini embeddings model
+    });
+    
   }
 
   /**
@@ -70,6 +78,10 @@ export class PineconeService implements IPineconeService {
       await this.initialize();
     }
 
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
+    }
+
     const vectors = await Promise.all(
       documents.map(async (doc) => {
         const embedding = await this.generateEmbedding(doc.content);
@@ -102,6 +114,10 @@ export class PineconeService implements IPineconeService {
       await this.initialize();
     }
 
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
+    }
+
     const vectors = await Promise.all(
       materials.map(async (material) => {
         const embedding = await this.generateEmbedding(material.content);
@@ -112,7 +128,7 @@ export class PineconeService implements IPineconeService {
             ...material.metadata,
             content: material.content,
             source: material.id,
-            type: 'training_material',
+            type: 'best_practice',
             lastUpdated: new Date().toISOString()
           }
         };
@@ -132,6 +148,10 @@ export class PineconeService implements IPineconeService {
   async tagDocument(docId: string, metadata: DocumentMetadata): Promise<void> {
     if (!this.index) {
       await this.initialize();
+    }
+
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
     }
 
     try {
@@ -163,10 +183,10 @@ export class PineconeService implements IPineconeService {
   /**
    * Build metadata filter for Pinecone queries
    */
-  private buildMetadataFilter(filters?: MetadataFilter): Record<string, any> {
+  private buildMetadataFilter(filters?: MetadataFilter): Record<string, unknown> {
     if (!filters) return {};
 
-    const filter: Record<string, any> = {};
+    const filter: Record<string, unknown> = {};
 
     if (filters.type) {
       filter.type = { $eq: filters.type };
@@ -187,17 +207,26 @@ export class PineconeService implements IPineconeService {
   /**
    * Convert Pinecone results to RetrievalResult format
    */
-  private convertToRetrievalResults(matches: any[]): RetrievalResult[] {
-    return matches.map(match => ({
-      content: match.metadata.content || '',
-      metadata: {
-        type: match.metadata.type,
-        category: match.metadata.category,
-        difficulty: match.metadata.difficulty,
-        tags: match.metadata.tags || []
-      },
-      score: match.score || 0
-    }));
+  private convertToRetrievalResults(matches: { metadata?: Record<string, unknown>; score?: number }[]): RetrievalResult[] {
+    return matches.map(match => {
+      const metadata = match.metadata || {};
+      return {
+        content: typeof metadata.content === 'string' ? metadata.content : '',
+        metadata: {
+          type: typeof metadata.type === 'string' && ['sop', 'script', 'best_practice'].includes(metadata.type) 
+            ? metadata.type as 'sop' | 'script' | 'best_practice' 
+            : 'sop',
+          category: typeof metadata.category === 'string' && ['booking', 'complaint', 'overbooking', 'general'].includes(metadata.category)
+            ? metadata.category as 'booking' | 'complaint' | 'overbooking' | 'general'
+            : 'general',
+          difficulty: typeof metadata.difficulty === 'string' && ['beginner', 'intermediate', 'advanced'].includes(metadata.difficulty)
+            ? metadata.difficulty as 'beginner' | 'intermediate' | 'advanced' 
+            : 'beginner',
+          tags: Array.isArray(metadata.tags) ? metadata.tags.filter((tag): tag is string => typeof tag === 'string') : []
+        },
+        score: match.score || 0
+      };
+    });
   }
 
   /**
@@ -206,6 +235,10 @@ export class PineconeService implements IPineconeService {
   async retrieveRelevantSOPs(query: string, filters?: MetadataFilter): Promise<RetrievalResult[]> {
     if (!this.index) {
       await this.initialize();
+    }
+
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
     }
 
     try {
@@ -236,10 +269,14 @@ export class PineconeService implements IPineconeService {
       await this.initialize();
     }
 
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
+    }
+
     try {
       const queryEmbedding = await this.generateEmbedding(scenario);
       const metadataFilter = this.buildMetadataFilter({
-        type: 'training_material',
+        type: 'best_practice',
         difficulty: difficulty as 'beginner' | 'intermediate' | 'advanced'
       });
 
@@ -262,6 +299,10 @@ export class PineconeService implements IPineconeService {
   async searchPolicyGuidance(userResponse: string): Promise<RetrievalResult[]> {
     if (!this.index) {
       await this.initialize();
+    }
+
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
     }
 
     try {
@@ -292,10 +333,14 @@ export class PineconeService implements IPineconeService {
         await this.initialize();
       }
       
+      if (!this.index) {
+        return false;
+      }
+      
       // Try to describe the index stats
       const stats = await this.index.describeIndexStats();
       return stats !== null;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -308,6 +353,10 @@ export class PineconeService implements IPineconeService {
       await this.initialize();
     }
 
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
+    }
+
     try {
       await this.index.deleteMany(ids);
     } catch (error) {
@@ -318,9 +367,13 @@ export class PineconeService implements IPineconeService {
   /**
    * Get index statistics
    */
-  async getIndexStats(): Promise<any> {
+  async getIndexStats(): Promise<Record<string, unknown>> {
     if (!this.index) {
       await this.initialize();
+    }
+
+    if (!this.index) {
+      throw new Error('Failed to initialize Pinecone index');
     }
 
     try {

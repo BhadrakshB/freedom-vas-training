@@ -39,7 +39,6 @@ export interface TrainingUIState {
   error?: AppError;
   
   // UI state flags
-  isLoading: boolean;
   isPanelFrozen: boolean;
   showFeedback: boolean;
   
@@ -57,7 +56,6 @@ export type TrainingAction =
   | { type: 'EXIT_FEEDBACK_PHASE' }
   | { type: 'FREEZE_PANEL' }
   | { type: 'UNFREEZE_PANEL' }
-  | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_ERROR'; error?: AppError | string | unknown }
   | { type: 'RESET_SESSION' };
 
@@ -71,7 +69,6 @@ const initialState: TrainingUIState = {
     completionPercentage: 0,
   },
   sessionDuration: 0,
-  isLoading: false,
   isPanelFrozen: false,
   showFeedback: false,
   criticalErrors: [],
@@ -88,7 +85,6 @@ function trainingReducer(state: TrainingUIState, action: TrainingAction): Traini
         completedSessionId: undefined,
         sessionStatus: 'creating',
         startTime: new Date(),
-        isLoading: false,
         isPanelFrozen: false,
         showFeedback: false,
         error: undefined,
@@ -153,17 +149,10 @@ function trainingReducer(state: TrainingUIState, action: TrainingAction): Traini
         isPanelFrozen: false,
       };
 
-    case 'SET_LOADING':
-      return {
-        ...state,
-        isLoading: action.loading,
-      };
-
     case 'SET_ERROR':
       return {
         ...state,
         error: action.error ? classifyError(action.error) : undefined,
-        isLoading: false,
       };
 
     case 'RESET_SESSION':
@@ -188,7 +177,6 @@ interface TrainingContextType {
   exitFeedbackPhase: () => void;
   updateSessionData: (data: Partial<TrainingUIState>) => void;
   setError: (error?: AppError | string | unknown) => void;
-  setLoading: (loading: boolean) => void;
   resetSession: () => void;
   
   // Computed properties
@@ -198,7 +186,6 @@ interface TrainingContextType {
   shouldShowTrainingPanel: boolean;
   panelTitle: string;
   mainChatTitle: string;
-  isLoading: boolean;
 }
 
 // Create context (works like Controller(), you use Get.put() later)
@@ -239,10 +226,6 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
     dispatch({ type: 'SET_ERROR', error });
   };
 
-  const setLoading = (loading: boolean) => {
-    dispatch({ type: 'SET_LOADING', loading });
-  };
-
   const resetSession = () => {
     dispatch({ type: 'RESET_SESSION' });
   };
@@ -252,7 +235,6 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
   const isFeedbackActive = state.phase === 'feedback' && state.showFeedback;
   const shouldShowMainChat = state.phase === 'idle' || state.phase === 'feedback';
   const shouldShowTrainingPanel = true; // Always show training panel
-  const isLoading = state.isLoading;
   
   const panelTitle = (() => {
     switch (state.phase) {
@@ -299,14 +281,12 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
     exitFeedbackPhase,
     updateSessionData,
     setError,
-    setLoading,
     resetSession,
     isTrainingActive,
     isFeedbackActive,
     shouldShowMainChat,
     shouldShowTrainingPanel,
     panelTitle,
-    isLoading,
     mainChatTitle,
   };
 

@@ -1,6 +1,10 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { TrainingProvider, useTraining } from "./contexts/TrainingContext";
+import { ChatLoadingProvider, useChatLoading } from "./contexts/ChatLoadingContext";
+import { TrainingLoadingProvider, useTrainingLoading } from "./contexts/TrainingLoadingContext";
+import { getChatSessionManager } from "./lib/chat-session-manager";
+import { getTrainingSessionManager } from "./lib/training-session-manager";
 import { TrainingPanel } from "./components/TrainingPanel";
 import { FeedbackInterface } from "./components/FeedbackInterface";
 import { ThemeToggle } from "./components/ThemeToggle";
@@ -13,20 +17,7 @@ import { ErrorAlert } from "./components/ErrorAlert";
 import { Maximize2, Minimize2, X, Eye, EyeOff } from "lucide-react";
 import { Alert, AlertDescription } from "./components/ui";
 
-interface ChatRequest {
-  message: string;
-  userId?: string;
-  context?:
-    | "general"
-    | "performance_review"
-    | "training_advice"
-    | "session_analysis";
-  conversationHistory?: Array<{
-    role: "user" | "assistant";
-    content: string;
-    timestamp?: string;
-  }>;
-}
+
 
 // Main content component that uses the training context
 function MainContent() {
@@ -37,117 +28,64 @@ function MainContent() {
     enterFeedbackPhase,
     exitFeedbackPhase,
     setError,
-    setLoading,
     isTrainingActive,
     isFeedbackActive,
-    isLoading,
   } = useTraining();
 
+  // Use isolated loading contexts
+  const chatLoading = useChatLoading();
+  const trainingLoading = useTrainingLoading();
+
+  // Use isolated session managers
+  const chatSessionManager = getChatSessionManager();
+  const trainingSessionManager = getTrainingSessionManager();
+
   const [input, setInput] = useState("");
-  const [resp, setResp] = useState<{ response?: string } | null>(null);
   const [panelMode, setPanelMode] = useState<"hidden" | "half" | "full">(
     "hidden"
   );
-  const [conversationHistory, setConversationHistory] = useState<
-    Array<{
-      role: "user" | "assistant";
-      content: string;
-      timestamp: string;
-    }>
-  >([]);
+  const [chatSessionState, setChatSessionState] = useState(chatSessionManager.getSessionState());
+
   const conversationEndRef = useRef<HTMLDivElement>(null);
 
   async function run() {
     if (!input.trim()) return;
 
     const currentInput = input;
-    const timestamp = new Date().toISOString();
-
-    // Add user message to conversation history
-    const userMessage = {
-      role: "user" as const,
-      content: currentInput,
-      timestamp,
-    };
-
-    setConversationHistory((prev) => [...prev, userMessage]);
     setInput("");
-    setLoading(true);
-    setResp(null);
+    chatLoading.setLoading(true, 'message-send');
 
     try {
-      const r = await fetch("/api/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          message: currentInput,
-          userId: "anonymous",
-          context: "general",
-          conversationHistory: conversationHistory,
-        } as ChatRequest),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!r.ok) {
-        throw new Error(`HTTP error! status: ${r.status}`);
-      }
-
-      const j = await r.json();
-      const assistantResponse =
-        j.response ||
-        "Sorry, I encountered an error processing your request. Please try again.";
-
-      // Add assistant response to conversation history
-      const assistantMessage = {
-        role: "assistant" as const,
-        content: assistantResponse,
-        timestamp: new Date().toISOString(),
-      };
-
-      setConversationHistory((prev) => [...prev, assistantMessage]);
-      setResp(j);
+      // Use ChatSessionManager for independent chat handling
+      await chatSessionManager.sendMessage(currentInput, "general", "anonymous");
+      setChatSessionState(chatSessionManager.getSessionState());
     } catch (error) {
       console.error("Chat error:", error);
-      const errorResponse =
-        "Sorry, I encountered an error processing your request. Please try again.";
-
-      // Add error response to conversation history
-      const errorMessage = {
-        role: "assistant" as const,
-        content: errorResponse,
-        timestamp: new Date().toISOString(),
-      };
-
-      setConversationHistory((prev) => [...prev, errorMessage]);
-      setResp({ response: errorResponse });
+      // Error is already handled by the session manager
+      setChatSessionState(chatSessionManager.getSessionState());
     } finally {
-      setLoading(false);
+      chatLoading.setLoading(false);
     }
   }
 
   async function startTrainingSession() {
     try {
-      setLoading(true);
-      const response = await fetch("/api/training/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          difficulty: "beginner",
-          category: "general",
-          trainingObjective: "To test new guy",
-        }),
+      trainingLoading.setLoading(true, 'session-start', 'Creating your personalized training scenario...');
+      
+      // Use TrainingSessionManager for independent training handling
+      const sessionId = await trainingSessionManager.startSession({
+        difficulty: "beginner",
+        category: "general",
+        trainingObjective: "To test new guy",
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        startSession(data.sessionId);
-      } else {
-        throw new Error("Failed to start training session");
-      }
+      
+      // Update TrainingContext with the new session
+      startSession(sessionId);
     } catch (error) {
       console.error("Failed to start training session:", error);
       setError(error);
     } finally {
-      setLoading(false);
+      trainingLoading.setLoading(false);
     }
   }
 
@@ -155,18 +93,8 @@ function MainContent() {
     if (!state.activeSessionId) return;
 
     try {
-      const response = await fetch("/api/training/respond", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: state.activeSessionId,
-          userResponse: message,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send message");
-      }
+      // Use TrainingSessionManager for independent training message handling
+      await trainingSessionManager.sendMessage(state.activeSessionId, message);
     } catch (error) {
       console.error("Failed to send training message:", error);
       throw error;
@@ -179,18 +107,18 @@ function MainContent() {
 
     const checkSessionStatus = async () => {
       try {
-        const response = await fetch(
-          `/api/training/status?sessionId=${state.activeSessionId}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          if (data.sessionStatus === "complete" && !state.showFeedback) {
-            completeSession(state.activeSessionId ?? "");
-            // Small delay to allow UI to update before entering feedback phase
-            setTimeout(() => {
-              enterFeedbackPhase(state.activeSessionId!);
-            }, 500);
-          }
+        // Use TrainingSessionManager for independent status checking
+        const status = await trainingSessionManager.getSessionStatus(state.activeSessionId!);
+        
+        if (status === "complete" && !state.showFeedback) {
+          // Complete session in both managers
+          trainingSessionManager.completeSession(state.activeSessionId!);
+          completeSession(state.activeSessionId!);
+          
+          // Small delay to allow UI to update before entering feedback phase
+          setTimeout(() => {
+            enterFeedbackPhase(state.activeSessionId!);
+          }, 500);
         }
       } catch (error) {
         console.error("Failed to check session status:", error);
@@ -213,6 +141,7 @@ function MainContent() {
     completeSession,
     enterFeedbackPhase,
     setError,
+    trainingSessionManager,
   ]);
 
   const handleCloseFeedback = () => {
@@ -225,14 +154,20 @@ function MainContent() {
   };
 
   const clearConversation = () => {
-    setConversationHistory([]);
-    setResp(null);
+    chatSessionManager.clearHistory();
+    setChatSessionState(chatSessionManager.getSessionState());
   };
+
+  // Initialize chat session on mount
+  useEffect(() => {
+    chatSessionManager.startSession();
+    setChatSessionState(chatSessionManager.getSessionState());
+  }, [chatSessionManager]);
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversationHistory]);
+  }, [chatSessionState.conversationHistory]);
 
   const getPanelClasses = () => {
     const baseClasses =
@@ -353,7 +288,8 @@ function MainContent() {
           ) : (
             <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
               {/* Session starting loading state */}
-              {isLoading &&
+              {trainingLoading.isLoading &&
+                trainingLoading.state.type === 'session-start' &&
                 !isTrainingActive &&
                 !isFeedbackActive &&
                 state.phase === "idle" && (
@@ -445,7 +381,7 @@ function MainContent() {
                   </Card>
 
                   {/* Conversation History */}
-                  {conversationHistory.length > 0 && (
+                  {chatSessionState.conversationHistory.length > 0 && (
                     <Card>
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
@@ -456,14 +392,14 @@ function MainContent() {
                             variant="outline"
                             size="sm"
                             onClick={clearConversation}
-                            disabled={isLoading}
+                            disabled={chatLoading.isLoading}
                           >
                             Clear
                           </Button>
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-4 max-h-96 overflow-y-auto">
-                        {conversationHistory.map((message, index) => (
+                        {chatSessionState.conversationHistory.map((message, index) => (
                           <div
                             key={index}
                             className={`flex ${
@@ -489,9 +425,7 @@ function MainContent() {
                                     : "text-muted-foreground"
                                 }`}
                               >
-                                {new Date(
-                                  message.timestamp
-                                ).toLocaleTimeString()}
+                                {message.timestamp.toLocaleTimeString()}
                               </div>
                             </div>
                           </div>
@@ -508,7 +442,7 @@ function MainContent() {
                           placeholder="Describe a task..."
                           value={input}
                           onChange={(e) => setInput(e.target.value)}
-                          disabled={isTrainingActive || isLoading}
+                          disabled={isTrainingActive || chatLoading.isLoading}
                           className="flex-1"
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
@@ -520,10 +454,10 @@ function MainContent() {
                         <Button
                           onClick={run}
                           disabled={
-                            isLoading || isTrainingActive || !input.trim()
+                            chatLoading.isLoading || isTrainingActive || !input.trim()
                           }
                         >
-                          {isLoading ? (
+                          {chatLoading.isLoading ? (
                             <div className="flex items-center gap-2">
                               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
                               Thinking...
@@ -537,7 +471,7 @@ function MainContent() {
                   </Card>
 
                   {/* Loading state for response */}
-                  {isLoading && (
+                  {chatLoading.isLoading && (
                     <Card>
                       <CardContent className="pt-6 space-y-3">
                         <div className="flex items-center gap-2 text-muted-foreground">
@@ -631,7 +565,11 @@ function MainContent() {
 export default function Home() {
   return (
     <TrainingProvider>
-      <MainContent />
+      <ChatLoadingProvider>
+        <TrainingLoadingProvider>
+          <MainContent />
+        </TrainingLoadingProvider>
+      </ChatLoadingProvider>
     </TrainingProvider>
   );
 }

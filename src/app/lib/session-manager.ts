@@ -1,7 +1,7 @@
 // In production, replace with database implementation
 const sessionStore = new Map();
 
-export async function createSession(initialState: any) {
+export async function createSession(initialState: Record<string, unknown>) {
   const sessionId = crypto.randomUUID();
   sessionStore.set(sessionId, {
     state: initialState,
@@ -10,7 +10,7 @@ export async function createSession(initialState: any) {
   return sessionId;
 }
 
-export async function saveSession(sessionId: string, state: any) {
+export async function saveSession(sessionId: string, state: Record<string, unknown>) {
   sessionStore.set(sessionId, {
     state,
     updatedAt: new Date()
@@ -54,7 +54,7 @@ export async function getCompletedSession(sessionId: string) {
     sessionId: session.state.sessionId,
     scenario: session.state.scenario,
     persona: session.state.persona,
-    conversation: session.state.messages.map((msg: { _getType: () => any; content: any; }) => ({
+    conversation: session.state.messages.map((msg: { _getType: () => string; content: string }) => ({
       role: msg._getType(),
       content: msg.content
     })),
@@ -66,7 +66,6 @@ export async function getCompletedSession(sessionId: string) {
     missingSteps: session.state.missing_steps,
     criticalErrors: session.state.escalation_points,
     finalScores: session.state.final_score,
-    completedAt: session.state.completedAt,
-
+    completedAt: session.state.completedAt
   };
 }

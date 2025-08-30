@@ -3,9 +3,13 @@ import { AIMessage } from "@langchain/core/messages";
 import { TrainingState } from "../training-state";
 
 // Helper to format conversation history
-function formatConversation(messages: any[]): string {
+function formatConversation(messages: { _getType(): string; content: unknown }[]): string {
   return messages
-    .map(m => `${m._getType() === "ai" ? "Guest" : "VA"}: ${m.content}`)
+    .map(m => {
+      const role = m._getType() === "ai" ? "Guest" : "VA";
+      const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+      return `${role}: ${content}`;
+    })
     .join("\n");
 }
 

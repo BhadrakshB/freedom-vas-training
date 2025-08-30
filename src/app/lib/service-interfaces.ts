@@ -4,7 +4,6 @@ import {
   DocumentMetadata, 
   RetrievalResult, 
   MetadataFilter, 
-  VectorDocument 
 } from "./types";
 
 /** Pinecone Integration Service Interface */
@@ -24,8 +23,8 @@ export interface PineconeService {
 export interface SessionManager {
   // Session lifecycle
   createSession(userId: string): Promise<string>;
-  getSession(sessionId: string): Promise<any>;
-  updateSession(sessionId: string, state: any): Promise<void>;
+  getSession(sessionId: string): Promise<Record<string, unknown>>;
+  updateSession(sessionId: string, state: Record<string, unknown>): Promise<void>;
   completeSession(sessionId: string): Promise<void>;
   
   // Session cleanup

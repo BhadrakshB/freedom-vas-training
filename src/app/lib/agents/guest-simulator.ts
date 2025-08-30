@@ -3,11 +3,17 @@ import { AIMessage } from "@langchain/core/messages";
 import { TrainingState } from "../training-state";
 
 // Helper to normalize Gemini output
-function asText(ai: any): string {
+function asText(ai: { content: unknown }): string {
   if (typeof ai.content === "string") return ai.content;
   if (Array.isArray(ai.content)) {
     return ai.content
-      .map((p: any) => (typeof p?.text === "string" ? p.text : ""))
+      .map((p) => {
+        if (typeof p === 'string') return p;
+        if (typeof p === 'object' && p && 'text' in p && typeof p.text === 'string') {
+          return p.text;
+        }
+        return '';
+      })
       .join(" ")
       .trim();
   }

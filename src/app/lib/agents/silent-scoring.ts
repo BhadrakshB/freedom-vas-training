@@ -1,11 +1,13 @@
 import { TrainingState } from "../training-state";
-import { HumanMessage } from "@langchain/core/messages";
+// Removed unused import
 
 // Helper to normalize text
-function normalizeText(text: any): string {
+function normalizeText(text: string | string[] | { text?: string } | unknown): string {
   if (typeof text === "string") return text.toLowerCase();
   if (Array.isArray(text)) return text.map(t => normalizeText(t)).join(" ");
-  if (typeof text === "object" && text?.text) return normalizeText(text.text);
+  if (typeof text === "object" && text && 'text' in text && typeof text.text === 'string') {
+    return normalizeText(text.text);
+  }
   return "";
 }
 
