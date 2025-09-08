@@ -30,6 +30,7 @@
     "dotenv": "^17.2.1",
     "drizzle-orm": "^0.44.5",
     "eventsource-parser": "^3.0.5",
+    "firebase": "^12.2.1",
     "langchain": "^0.3.31",
     "lucide-react": "^0.542.0",
     "next": "15.5.0",
