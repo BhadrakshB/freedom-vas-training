@@ -319,6 +319,7 @@ You must behave rationally and realistically.
 `, // System prompt omitted for brevity.
   returnFunction: function (state: typeof TrainingState.State, response: CustomerSimulatorSchema) {
     return {
+      ...state,
       conversationHistory: [...state.conversationHistory,
       new AIMessage(response.Message),
       ]
