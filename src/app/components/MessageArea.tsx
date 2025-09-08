@@ -3,7 +3,7 @@
 import * as React from "react"
 import { ScrollArea } from "@/app/components/ui/scroll-area"
 import { cn } from "@/app/lib/utils"
-import { BaseMessage } from "@langchain/core/messages";
+import { BaseMessage, AIMessage, HumanMessage } from "@langchain/core/messages";
 
 
 interface MessageAreaProps {
@@ -55,16 +55,15 @@ function MessageList({ messages }: { messages: BaseMessage[] }) {
 }
 
 function MessageBubble({ message }: { message: BaseMessage }) {
-  const isUser = message.name === "user"
-  
+  const isHuman = message instanceof HumanMessage
   return (
     <div className={cn(
       "flex w-full",
-      isUser ? "justify-end" : "justify-start"
+      isHuman ? "justify-end" : "justify-start"
     )}>
       <div className={cn(
         "max-w-[85%] sm:max-w-[80%] md:max-w-[70%] rounded-lg px-3 sm:px-4 py-2 text-sm",
-        isUser 
+        isHuman 
           ? "bg-primary text-primary-foreground ml-4 sm:ml-8 md:ml-12" 
           : "bg-muted text-muted-foreground mr-4 sm:mr-8 md:mr-12"
       )}>
@@ -73,7 +72,7 @@ function MessageBubble({ message }: { message: BaseMessage }) {
         </div>
         {/* <div className={cn(
           "text-xs mt-1 opacity-70",
-          isUser ? "text-primary-foreground/70" : "text-muted-foreground/70"
+          isHuman ? "text-primary-foreground/70" : "text-muted-foreground/70"
         )}>
           {message..toLocaleTimeString([], { 
             hour: '2-digit', 

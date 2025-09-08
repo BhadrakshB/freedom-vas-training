@@ -68,8 +68,16 @@ const TrainingState = Annotation.Root({
     reducer: messagesStateReducer,
     default: () => [],
   }),
-  scenario: Annotation<ScenarioGeneratorSchema>(),
-  persona: Annotation<PersonaGeneratorSchema>(),
+  scenario: Annotation<ScenarioGeneratorSchema>(
+    {
+    reducer: (a,b) => a,
+  }
+  ),
+  persona: Annotation<PersonaGeneratorSchema>(
+    {
+    reducer: (a,b) => a,
+  }
+  ),
   status: Annotation<TrainingStateType>(),
   feedback: Annotation<FeedbackSchema>(),
   customScenario: Annotation<string>(),
@@ -113,6 +121,8 @@ const makeAgentNode = <T>({
 
     var updatedState = returnFunction(state, response);
 
+    console.log(`🔄 Updated State from ${name}:`, JSON.stringify(updatedState, null, 2));
+    
     // ✅ Special handling for Customer Agent
     if (name === "Customer_Simulator") {
       if (response?.Resolution_Accepted === true) {
@@ -126,7 +136,7 @@ const makeAgentNode = <T>({
       }
     }
 
-    return updatedState;
+    return {...updatedState};
   };
 };
 
@@ -285,20 +295,21 @@ const customerSimulator = makeAgentNode<CustomerSimulatorSchema>({
   systemPrompt: (state: typeof TrainingState.State) => `<SYSTEM>
 You are the <ROLE>Customer Simulating Agent</ROLE>.  
 Your role is to roleplay as the guest or vendor during a training simulation for Virtual Assistants (VAs).  
-You must behave rationally and realistically.
+You must behave rationally, realistically, and in character according to the given Persona and Scenario.
 </SYSTEM>
 
 <INSTRUCTIONS>
   <RULES>
-    <Rule>Stay in character as described by the Persona.</Rule>
-    <Rule>Engage in a natural conversation about your problem based on the given Scenario and Persona.</Rule>
-    <Rule>Do not jump to conclusions or end the interaction prematurely.</Rule>
-    <Rule>Only mark <Resolution_Accepted>true</Resolution_Accepted> when the solution provided by the trainee fully resolves the problem described in the Scenario and meets the expectations of the Persona.</Rule>
-    <Rule>If the solution involves an asynchronous task (e.g., calling staff, informing manager, confirming booking, arranging chauffeur), assume it is completed successfully and continue the conversation accordingly.</Rule>
-    <Rule>Do not mark <Resolution_Accepted>true</Resolution_Accepted> just because the trainee performed an action. Instead, carefully reason whether the problem is fully resolved or if further interaction is necessary.</Rule>
-    <Rule>Once the problem is resolved, respond in a way that clearly reflects satisfaction or closure, and mark <Resolution_Accepted>true</Resolution_Accepted>.</Rule>
-    <Rule>Do not demand contradictory or irrational solutions. If your need is addressed, do not escalate further.</Rule>
-    <Rule>Escalate only once if absolutely necessary. If escalation leads to a clear resolution path, accept it and continue the conversation until the problem is solved.</Rule>
+    <Rule>Begin the conversation by clearly stating your problem based on the Scenario and Persona, without waiting for the trainee to ask the first question.</Rule>
+    <Rule>Engage in a natural, realistic back-and-forth conversation about your problem, asking questions or providing additional context as needed, until the problem is resolved.</Rule>
+    <Rule>Do not jump to conclusions, skip steps, or prematurely end the interaction.</Rule>
+    <Rule>Only mark <Resolution_Accepted>true</Resolution_Accepted> when the solution provided by the trainee fully resolves the core problem described in the Scenario and meets the Persona's expectations in a realistic way.</Rule>
+    <Rule>If the solution involves an asynchronous task (e.g., calling staff, informing manager, confirming booking, arranging chauffeur), assume it is completed successfully and reflect this in your next message. Continue the conversation until full resolution is reached.</Rule>
+    <Rule>Carefully reason whether the problem is truly solved; do not mark <Resolution_Accepted>true</Resolution_Accepted> simply because an action was performed.</Rule>
+    <Rule>Once a valid solution is recognized, respond with a message that clearly reflects acceptance and closure, and mark <Resolution_Accepted>true</Resolution_Accepted>.</Rule>
+    <Rule>Do not escalate unnecessarily or demand contradictory solutions. If your needs are addressed, proceed toward resolution without further escalation.</Rule>
+    <Rule>Escalate only once when it is absolutely necessary, and accept any clear path toward problem resolution that follows escalation.</Rule>
+    <Rule>Your simulated behavior must consistently reflect the Personality traits and expectations defined in the input Persona object.</Rule>
   </RULES>
 
   <INPUTS>
@@ -315,9 +326,16 @@ You must behave rationally and realistically.
     </Customer_Simulation>
   </OUTPUT_SCHEMA>
 </INSTRUCTIONS>
-
 `, // System prompt omitted for brevity.
   returnFunction: function (state: typeof TrainingState.State, response: CustomerSimulatorSchema) {
+console.log(`Customer Simulator State:`, JSON.stringify({
+      scenario: state.scenario,
+      persona: state.persona,
+      conversationHistoryLength: state.conversationHistory.length,
+      status: state.status
+    }, null, 2));
+    console.log(`Customer Simulator Response:`, JSON.stringify(response, null, 2));
+    
     return {
       ...state,
       conversationHistory: [...state.conversationHistory,
