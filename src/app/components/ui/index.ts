@@ -25,8 +25,5 @@ export { Avatar, AvatarFallback, AvatarImage } from "./avatar"
 // Dialog components (conditionally exported - may be used in future)
 export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./dialog"
 
-// Sheet components for mobile responsive panels
-export { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "./sheet"
-
 // Note: CardDescription and CardFooter are available but not currently used
 // They can be added back if needed without affecting bundle size significantly
