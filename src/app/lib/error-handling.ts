@@ -1,160 +1,124 @@
-// Centralized error handling utilities
+// Error handling utilities for the AI Training Simulator
 
-export type ErrorType = 'network' | 'validation' | 'authentication' | 'server' | 'client' | 'unknown';
+export const ERROR_MESSAGES = {
+  VALIDATION_ERROR: "Invalid input provided. Please check your data and try again.",
+  CHAT_ERROR: "I'm having trouble processing your message right now. Please try again in a moment.",
+  UNKNOWN_ERROR: "An unexpected error occurred. Please try again.",
+  TRAINING_SESSION_ERROR: "Unable to process training session. Please try again.",
+  AGENT_ERROR: "AI agent encountered an error. Please retry your request.",
+  NETWORK_ERROR: "Network connection issue. Please check your connection and try again.",
+  TIMEOUT_ERROR: "Request timed out. Please try again.",
+} as const;
+
+export type ErrorType = 
+  | 'validation'
+  | 'network'
+  | 'timeout'
+  | 'agent'
+  | 'session'
+  | 'unknown';
+
 export type ErrorSeverity = 'low' | 'medium' | 'high' | 'critical';
-
-export interface AppError {
-  type: ErrorType;
-  severity: ErrorSeverity;
-  message: string;
-  details?: string;
-  code?: string;
-  timestamp: Date;
-  context?: Record<string, unknown>;
-}
 
 export class TrainingError extends Error {
   public readonly type: ErrorType;
   public readonly severity: ErrorSeverity;
   public readonly code?: string;
-  public readonly context?: Record<string, unknown>;
+  public readonly details?: Record<string, any>;
+  public readonly timestamp: Date;
 
   constructor(
     message: string,
     type: ErrorType = 'unknown',
     severity: ErrorSeverity = 'medium',
     code?: string,
-    context?: Record<string, unknown>
+    details?: Record<string, any>
   ) {
     super(message);
     this.name = 'TrainingError';
     this.type = type;
     this.severity = severity;
     this.code = code;
-    this.context = context;
+    this.details = details;
+    this.timestamp = new Date();
+
+    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, TrainingError);
+    }
   }
 
-  toAppError(): AppError {
+  toJSON() {
     return {
+      name: this.name,
+      message: this.message,
       type: this.type,
       severity: this.severity,
-      message: this.message,
-      details: this.stack,
       code: this.code,
-      timestamp: new Date(),
-      context: this.context
+      details: this.details,
+      timestamp: this.timestamp.toISOString(),
+      stack: this.stack,
     };
   }
 }
 
-// Error classification helpers
-export const classifyError = (error: unknown): AppError => {
-  if (error instanceof TrainingError) {
-    return error.toAppError();
+export function isTrainingError(error: unknown): error is TrainingError {
+  return error instanceof TrainingError;
+}
+
+export function createTrainingError(
+  message: string,
+  type: ErrorType = 'unknown',
+  severity: ErrorSeverity = 'medium',
+  code?: string,
+  details?: Record<string, any>
+): TrainingError {
+  return new TrainingError(message, type, severity, code, details);
+}
+
+export function handleTrainingError(error: unknown): TrainingError {
+  if (isTrainingError(error)) {
+    return error;
   }
 
   if (error instanceof Error) {
-    // Network errors
-    if (error.message.includes('fetch') || error.message.includes('network')) {
-      return {
-        type: 'network',
-        severity: 'high',
-        message: 'Network connection error. Please check your internet connection.',
-        details: error.message,
-        timestamp: new Date()
-      };
-    }
-
-    // Server errors
-    if (error.message.includes('500') || error.message.includes('server')) {
-      return {
-        type: 'server',
-        severity: 'high',
-        message: 'Server error occurred. Please try again later.',
-        details: error.message,
-        timestamp: new Date()
-      };
-    }
-
-    // Validation errors
-    if (error.message.includes('validation') || error.message.includes('invalid')) {
-      return {
-        type: 'validation',
-        severity: 'medium',
-        message: 'Invalid input provided. Please check your data.',
-        details: error.message,
-        timestamp: new Date()
-      };
-    }
-
-    // Authentication errors
-    if (error.message.includes('auth') || error.message.includes('unauthorized')) {
-      return {
-        type: 'authentication',
-        severity: 'high',
-        message: 'Authentication required. Please log in again.',
-        details: error.message,
-        timestamp: new Date()
-      };
-    }
-
-    // Generic error
-    return {
-      type: 'client',
-      severity: 'medium',
-      message: error.message || 'An unexpected error occurred.',
-      details: error.stack,
-      timestamp: new Date()
-    };
+    return new TrainingError(
+      error.message,
+      'unknown',
+      'medium',
+      undefined,
+      { originalError: error.name }
+    );
   }
 
-  // Unknown error type
-  return {
-    type: 'unknown',
-    severity: 'medium',
-    message: 'An unknown error occurred.',
-    details: String(error),
-    timestamp: new Date()
-  };
-};
+  return new TrainingError(
+    ERROR_MESSAGES.UNKNOWN_ERROR,
+    'unknown',
+    'medium',
+    'UNKNOWN_ERROR_TYPE'
+  );
+}
 
-// Error message helpers
-export const getErrorVariant = (severity: ErrorSeverity): 'default' | 'destructive' => {
-  return severity === 'high' || severity === 'critical' ? 'destructive' : 'default';
-};
+// Alias for backward compatibility
+export const AppError = TrainingError;
 
-export const getErrorIcon = (type: ErrorType): string => {
-  switch (type) {
-    case 'network':
-      return '🌐';
-    case 'server':
-      return '🔧';
-    case 'validation':
-      return '📝';
-    case 'authentication':
-      return '🔐';
-    case 'client':
-      return '💻';
-    default:
-      return '⚠️';
+export function classifyError(error: unknown): ErrorType {
+  if (isTrainingError(error)) {
+    return error.type;
   }
-};
-
-export const getRetryableErrors = (): ErrorType[] => {
-  return ['network', 'server'];
-};
-
-export const isRetryableError = (error: AppError): boolean => {
-  return getRetryableErrors().includes(error.type);
-};
-
-// Common error messages
-export const ERROR_MESSAGES = {
-  NETWORK_ERROR: 'Unable to connect to the server. Please check your internet connection.',
-  SERVER_ERROR: 'Server is temporarily unavailable. Please try again later.',
-  VALIDATION_ERROR: 'Please check your input and try again.',
-  SESSION_ERROR: 'Training session error occurred. Please restart the session.',
-  CHAT_ERROR: 'Unable to process your message. Please try again.',
-  FEEDBACK_ERROR: 'Unable to generate feedback. Please try again.',
-  UNKNOWN_ERROR: 'An unexpected error occurred. Please try again.'
-} as const;
+  
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message.includes('network') || message.includes('fetch')) {
+      return 'network';
+    }
+    if (message.includes('timeout')) {
+      return 'timeout';
+    }
+    if (message.includes('validation') || message.includes('invalid')) {
+      return 'validation';
+    }
+  }
+  
+  return 'unknown';
+}

@@ -1,238 +1,398 @@
-"use server";
+'use server'
 
-import { db } from "@/lib/db";
-import { trainings, message } from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { AIMessage, BaseMessage, MessageContent } from "@langchain/core/messages";
+import { TrainingError, ERROR_MESSAGES } from "../error-handling";
+import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow } from "@/lib/agents/v2/graph_v2"
 
-export async function createTraining(
-  userId: string,
-  threadId: string,
-  scenario: any,
-  persona: any
-) {
+interface StartTrainingResponse {
+  scenario?: ScenarioGeneratorSchema,
+  guestPersona?: PersonaGeneratorSchema,
+  messages: BaseMessage[],
+  finalOutput?: MessageContent,
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+interface StartTrainingRequest {
+  customScenario?: string;
+  customPersona?: string;
+}
+
+export async function startTrainingSession(request?: StartTrainingRequest): Promise<StartTrainingResponse> {
   try {
-    const [newTraining] = await db
-      .insert(trainings)
-      .values({
-        userId,
-        threadId,
-        scenario,
-        persona,
-        status: "active",
-        startedAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
 
-    revalidatePath("/");
-    return { success: true, training: newTraining };
+    const data = await workflow.invoke({
+      conversationHistory: [],
+      customScenario: request?.customScenario,
+      customPersona: request?.customPersona,
+    });
+
+    console.log("=== WORKFLOW STATE RETURNED ===");
+    console.log("Full State:", JSON.stringify(data, null, 2));
+    console.log("Messages:", data?.conversationHistory?.length || 0);
+    console.log("Scenario:", data?.scenario ? "Present" : "Not present");
+    console.log("Persona:", data?.persona ? "Present" : "Not present");
+    console.log("===============================");
+
+    const messages = data?.conversationHistory || [];
+    const lastMessage =
+      messages[messages.length - 1]?.content || "Workflow completed.";
+
+    return {
+      // state: data,
+      scenario: data?.scenario ,
+      guestPersona: data?.persona,
+      messages: data?.conversationHistory,
+      finalOutput: lastMessage,
+    }
   } catch (error) {
-    console.error("Error creating training:", error);
-    return { success: false, error: "Failed to create training" };
+    console.error("Error in startWorkflow API:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "An unknown error occurred.";
+    return {
+      messages: [],
+      error: errorMessage,
+    }
   }
 }
 
-export async function getTrainingById(id: string) {
-  try {
-    const [foundTraining] = await db
-      .select()
-      .from(trainings)
-      .where(eq(trainings.id, id))
-      .limit(1);
 
-    return { success: true, training: foundTraining };
-  } catch (error) {
-    console.error("Error fetching training:", error);
-    return { success: false, error: "Failed to fetch training" };
-  }
+interface UpdateTrainingRequest {
+  scenario?: ScenarioGeneratorSchema,
+  guestPersona?: PersonaGeneratorSchema,
+  messages: BaseMessage[],
 }
 
-export async function getTrainingsByUserId(userId: string) {
-  try {
-    const userTrainings = await db
-      .select()
-      .from(trainings)
-      .where(eq(trainings.userId, userId))
-      .orderBy(desc(trainings.createdAt));
-
-    return { success: true, trainings: userTrainings };
-  } catch (error) {
-    console.error("Error fetching user trainings:", error);
-    return { success: false, error: "Failed to fetch trainings" };
-  }
+interface UpdateTrainingResponse {
+  scenario?: ScenarioGeneratorSchema,
+  guestPersona?: PersonaGeneratorSchema,
+  messages: BaseMessage[],
+  guestResponse: MessageContent,
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
 }
 
-export async function getTrainingsByThreadId(threadId: string) {
+export async function updateTrainingSession(request: UpdateTrainingRequest): Promise<UpdateTrainingResponse> {
   try {
-    const threadTrainings = await db
-      .select()
-      .from(trainings)
-      .where(eq(trainings.threadId, threadId))
-      .orderBy(desc(trainings.createdAt));
-
-    return { success: true, trainings: threadTrainings };
-  } catch (error) {
-    console.error("Error fetching thread trainings:", error);
-    return { success: false, error: "Failed to fetch trainings" };
-  }
-}
-
-export async function getActiveTraining(userId: string, threadId: string) {
-  try {
-    const [activeTraining] = await db
-      .select()
-      .from(trainings)
-      .where(
-        and(
-          eq(trainings.userId, userId),
-          eq(trainings.threadId, threadId),
-          eq(trainings.status, "active")
-        )
-      )
-      .limit(1);
-
-    return { success: true, training: activeTraining };
-  } catch (error) {
-    console.error("Error fetching active training:", error);
-    return { success: false, error: "Failed to fetch active training" };
-  }
-}
-
-export async function updateTrainingStatus(
-  id: string, 
-  status: "active" | "completed" | "paused",
-  completedAt?: Date
-) {
-  try {
-    const updateData: any = {
-      status,
-      updatedAt: new Date(),
-    };
-
-    if (status === "completed" && completedAt) {
-      updateData.completedAt = completedAt;
+    // Validate required fields
+    if (!request.scenario || typeof request.scenario !== "object") {
+      throw new TrainingError(
+        "Scenario is required to update training session",
+        'validation',
+        'medium',
+        'MISSING_SCENARIO'
+      );
     }
 
-    const [updatedTraining] = await db
-      .update(trainings)
-      .set(updateData)
-      .where(eq(trainings.id, id))
-      .returning();
-
-    revalidatePath("/");
-    return { success: true, training: updatedTraining };
-  } catch (error) {
-    console.error("Error updating training status:", error);
-    return { success: false, error: "Failed to update training status" };
-  }
-}
-
-export async function updateTrainingScore(id: string, score: any) {
-  try {
-    const [updatedTraining] = await db
-      .update(trainings)
-      .set({
-        score,
-        updatedAt: new Date(),
-      })
-      .where(eq(trainings.id, id))
-      .returning();
-
-    revalidatePath("/");
-    return { success: true, training: updatedTraining };
-  } catch (error) {
-    console.error("Error updating training score:", error);
-    return { success: false, error: "Failed to update training score" };
-  }
-}
-
-export async function updateTrainingFeedback(id: string, feedback: any) {
-  try {
-    const [updatedTraining] = await db
-      .update(trainings)
-      .set({
-        feedback,
-        updatedAt: new Date(),
-      })
-      .where(eq(trainings.id, id))
-      .returning();
-
-    revalidatePath("/");
-    return { success: true, training: updatedTraining };
-  } catch (error) {
-    console.error("Error updating training feedback:", error);
-    return { success: false, error: "Failed to update training feedback" };
-  }
-}
-
-export async function completeTraining(id: string, score?: any, feedback?: any) {
-  try {
-    const updateData: any = {
-      status: "completed" as const,
-      completedAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    if (score) updateData.score = score;
-    if (feedback) updateData.feedback = feedback;
-
-    const [updatedTraining] = await db
-      .update(trainings)
-      .set(updateData)
-      .where(eq(trainings.id, id))
-      .returning();
-
-    revalidatePath("/");
-    return { success: true, training: updatedTraining };
-  } catch (error) {
-    console.error("Error completing training:", error);
-    return { success: false, error: "Failed to complete training" };
-  }
-}
-
-export async function deleteTraining(id: string) {
-  try {
-    // First delete all training messages
-    await db.delete(message).where(eq(message.trainingId, id));
-    
-    // Then delete the training
-    await db.delete(trainings).where(eq(trainings.id, id));
-    
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    console.error("Error deleting training:", error);
-    return { success: false, error: "Failed to delete training" };
-  }
-}
-
-export async function getTrainingWithMessages(trainingId: string) {
-  try {
-    const [training] = await db
-      .select()
-      .from(trainings)
-      .where(eq(trainings.id, trainingId))
-      .limit(1);
-
-    if (!training) {
-      return { success: false, error: "Training not found" };
+    if (!request.guestPersona || typeof request.guestPersona !== "object") {
+      throw new TrainingError(
+        "Guest persona is required to update training session",
+        'validation',
+        'medium',
+        'MISSING_PERSONA'
+      );
     }
 
-    const messages = await db
-      .select()
-      .from(message)
-      .where(eq(message.trainingId, trainingId))
-      .orderBy(message.createdAt);
+    if (!request.messages || !Array.isArray(request.messages)) {
+      throw new TrainingError(
+        "Conversation history is required to update training session",
+        'validation',
+        'medium',
+        'MISSING_CONVERSATION_HISTORY'
+      );
+    }
 
-    return { 
-      success: true, 
-      training,
-      messages 
-    };
+    console.log(`Updating training session with ${request.messages.length} messages`);
+
+    // Create guest agent and process conversation
+    const data = await workflow.invoke({
+      conversationHistory: request.messages,
+      persona: request.guestPersona,
+      scenario: request.scenario,
+    });
+
+    console.log("=== WORKFLOW STATE RETURNED ===");
+    console.log("Full State:", JSON.stringify(data, null, 2));
+    console.log("Messages:", data?.conversationHistory?.length || 0);
+    console.log("Scenario:", data?.scenario ? "Present" : "Not present");
+    console.log("Persona:", data?.persona ? "Present" : "Not present");
+    console.log("===============================");
+
+    const messages = data?.conversationHistory || [];
+    const lastMessage =
+      messages[messages.length - 1]?.content;
+
+    return {
+      // state: data,
+      scenario: data?.scenario,
+      guestPersona: data?.persona,
+      messages: data?.conversationHistory,
+      guestResponse: lastMessage,
+    }
+
   } catch (error) {
-    console.error("Error fetching training with messages:", error);
-    return { success: false, error: "Failed to fetch training data" };
+    console.error("Update training session error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        guestResponse: "",
+        messages: request.messages,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      guestResponse: "",
+      messages: request.messages,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}
+
+interface EndTrainingRequest {
+  sessionId: string;
+  userId: string;
+  reason?: 'completed' | 'user_ended' | 'timeout';
+}
+
+interface EndTrainingResponse {
+  finalScore: number;
+  detailedFeedback: {
+    overallPerformance: string;
+    strengths: string[];
+    improvementAreas: string[];
+    sopReferences: string[];
+    recommendations: string[];
+  };
+  sessionSummary: {
+    duration: number;
+    messageCount: number;
+    objectivesAchieved: number;
+    totalObjectives: number;
+  };
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+// export async function endTrainingSession(request: EndTrainingRequest): Promise<EndTrainingResponse> {
+//   try {
+//     // Validate required fields
+//     if (!request.sessionId || typeof request.sessionId !== "string") {
+//       throw new TrainingError(
+//         "Session ID is required to end training session",
+//         'validation',
+//         'medium',
+//         'MISSING_SESSION_ID'
+//       );
+//     }
+
+//     if (!request.userId || typeof request.userId !== "string") {
+//       throw new TrainingError(
+//         "User ID is required to end training session",
+//         'validation',
+//         'medium',
+//         'MISSING_USER_ID'
+//       );
+//     }
+
+//     console.log(`Ending training session ${request.sessionId} for user: ${request.userId}`);
+
+//     // Create training agent and finalize session
+//     const data = await workflow.invoke({
+//       conversationHistory: request.messages,
+//       persona: request.guestPersona,
+//       scenario: request.scenario,
+//     });
+
+//     console.log("=== WORKFLOW STATE RETURNED ===");
+//     console.log("Full State:", JSON.stringify(data, null, 2));
+//     console.log("Messages:", data?.conversationHistory?.length || 0);
+//     console.log("Scenario:", data?.scenario ? "Present" : "Not present");
+//     console.log("Persona:", data?.persona ? "Present" : "Not present");
+//     console.log("===============================");
+
+//     const messages = data?.conversationHistory || [];
+//     const lastMessage =
+//       messages[messages.length - 1];
+
+//     return  {
+//         // state: data,
+//         scenario: data?.scenario,
+//         guestPersona: data?.persona,
+//         messages: data?.conversationHistory,
+//         guestResponse: lastMessage,
+//       }
+
+//   } catch (error) {
+//     console.error("End training session error:", error);
+
+//     if (error instanceof TrainingError) {
+//       return {
+//         finalScore: 0,
+//         detailedFeedback: {
+//           overallPerformance: '',
+//           strengths: [],
+//           improvementAreas: [],
+//           sopReferences: [],
+//           recommendations: []
+//         },
+//         sessionSummary: {
+//           duration: 0,
+//           messageCount: 0,
+//           objectivesAchieved: 0,
+//           totalObjectives: 0
+//         },
+//         error: error.message,
+//         errorType: error.type,
+//         errorCode: error.code,
+//       };
+//     }
+
+//     return {
+//       finalScore: 0,
+//       detailedFeedback: {
+//         overallPerformance: '',
+//         strengths: [],
+//         improvementAreas: [],
+//         sopReferences: [],
+//         recommendations: []
+//       },
+//       sessionSummary: {
+//         duration: 0,
+//         messageCount: 0,
+//         objectivesAchieved: 0,
+//         totalObjectives: 0
+//       },
+//       error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+//       errorType: 'unknown',
+//     };
+//   }
+// }
+
+interface RefineScenarioRequest {
+  scenario: string;
+}
+
+interface RefineScenarioResponse {
+  refinedScenario?: ScenarioGeneratorSchema;
+  originalScenario: string;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function refineScenario(request: RefineScenarioRequest): Promise<RefineScenarioResponse> {
+  try {
+    // Validate required fields
+    if (!request.scenario || typeof request.scenario !== "string") {
+      throw new TrainingError(
+        "Scenario is required to refine scenario",
+        'validation',
+        'medium',
+        'MISSING_SCENARIO'
+      );
+    }
+
+    console.log(`Refining scenario: ${request.scenario.substring(0, 100)}...`);
+
+    const data = await scenarioPersonaRefineWorkflow.invoke({
+      customScenario: request.scenario,
+      flag: "scenario",
+    });
+
+    console.log("=== SCENARIO REFINE WORKFLOW STATE RETURNED ===");
+    console.log("Full State:", JSON.stringify(data, null, 2));
+    console.log("Refined Scenario:", data?.scenario ? "Present" : "Not present");
+    console.log("===============================");
+
+    return {
+      refinedScenario: data?.scenario,
+      originalScenario: request.scenario,
+    };
+
+  } catch (error) {
+    console.error("Refine scenario error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        originalScenario: request.scenario,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      originalScenario: request.scenario,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}
+
+interface RefinePersonaRequest {
+  persona: string;
+}
+
+interface RefinePersonaResponse {
+  refinedPersona?: PersonaGeneratorSchema;
+  originalPersona: string;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function refinePersona(request: RefinePersonaRequest): Promise<RefinePersonaResponse> {
+  try {
+    // Validate required fields
+    if (!request.persona || typeof request.persona !== "string") {
+      throw new TrainingError(
+        "Persona is required to refine persona",
+        'validation',
+        'medium',
+        'MISSING_PERSONA'
+      );
+    }
+
+    console.log(`Refining persona: ${request.persona.substring(0, 100)}...`);
+
+    const data = await scenarioPersonaRefineWorkflow.invoke({
+      customPersona: request.persona,
+      flag: "persona",
+    });
+
+    console.log("=== PERSONA REFINE WORKFLOW STATE RETURNED ===");
+    console.log("Full State:", JSON.stringify(data, null, 2));
+    console.log("Refined Persona:", data?.persona ? "Present" : "Not present");
+    console.log("===============================");
+
+    return {
+      refinedPersona: data?.persona,
+      originalPersona: request.persona,
+    };
+
+  } catch (error) {
+    console.error("Refine persona error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        originalPersona: request.persona,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      originalPersona: request.persona,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
   }
 }

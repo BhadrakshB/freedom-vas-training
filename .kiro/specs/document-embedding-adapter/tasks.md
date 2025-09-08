@@ -1,12 +1,12 @@
 # Implementation Plan
 
-- [ ] 1. Create core interfaces and types for the document embedding adapter
+- [x] 1. Create core interfaces and types for the document embedding adapter
   - Define ProcessedDocument, DocumentChunk, EmbeddingOptions, and EmbeddingMetrics interfaces
   - Create error types for different failure scenarios
   - Add new interfaces to existing types.ts file
   - _Requirements: 1.2, 2.2, 4.3_
 
-- [ ] 2. Implement DocumentProcessor class for text preprocessing and chunking
+- [-] 2. Implement DocumentProcessor class for text preprocessing and chunking
   - Create DocumentProcessor class with text cleaning and normalization methods
   - Implement intelligent chunking logic that respects sentence boundaries
   - Add chunk overlap functionality to maintain context between chunks

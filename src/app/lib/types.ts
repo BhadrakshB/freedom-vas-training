@@ -103,7 +103,7 @@ export interface MetadataFilter {
 
 /** Session Status Types */
 
-export type SessionStatus = 'creating' | 'active' | 'complete';
+export type SessionStatus = 'creating' | 'active' | 'complete' | 'idle';
 
 /** Training Simulator State Interface */
 
@@ -199,4 +199,80 @@ export interface FeedbackOutput {
   actionableRecommendations: ActionableRecommendation[];
   resources: ResourceRecommendation[];
   nextSteps: string[];
+}
+
+/** Document Embedding Adapter Types */
+
+export interface ProcessedDocument {
+  id: string;
+  chunks: DocumentChunk[];
+  metadata: DocumentMetadata;
+  totalTokens: number;
+}
+
+export interface DocumentChunk {
+  content: string;
+  embedding: number[];
+  chunkIndex: number;
+  tokenCount: number;
+}
+
+export interface EmbeddingOptions {
+  batchSize?: number;
+  maxRetries?: number;
+  enableCaching?: boolean;
+  chunkSize?: number;
+  chunkOverlap?: number;
+}
+
+export interface EmbeddingMetrics {
+  totalDocuments: number;
+  totalChunks: number;
+  totalTokens: number;
+  apiCalls: number;
+  cacheHits: number;
+  processingTime: number;
+  errors: number;
+}
+
+/** Document Embedding Error Types */
+
+export type EmbeddingErrorType = 
+  | 'RATE_LIMIT'
+  | 'NETWORK_ERROR'
+  | 'TIMEOUT'
+  | 'INVALID_API_KEY'
+  | 'MALFORMED_REQUEST'
+  | 'QUOTA_EXCEEDED'
+  | 'VALIDATION_ERROR'
+  | 'PROCESSING_ERROR'
+  | 'UNKNOWN_ERROR';
+
+export interface EmbeddingError extends Error {
+  type: EmbeddingErrorType;
+  retryable: boolean;
+  details?: Record<string, any>;
+  originalError?: Error;
+}
+
+export class DocumentEmbeddingError extends Error implements EmbeddingError {
+  public readonly type: EmbeddingErrorType;
+  public readonly retryable: boolean;
+  public readonly details?: Record<string, any>;
+  public readonly originalError?: Error;
+
+  constructor(
+    type: EmbeddingErrorType,
+    message: string,
+    retryable: boolean = false,
+    details?: Record<string, any>,
+    originalError?: Error
+  ) {
+    super(message);
+    this.name = 'DocumentEmbeddingError';
+    this.type = type;
+    this.retryable = retryable;
+    this.details = details;
+    this.originalError = originalError;
+  }
 }

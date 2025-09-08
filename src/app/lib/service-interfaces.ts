@@ -1,81 +1,47 @@
-// Service interfaces for AI Training Simulator
+// Service interfaces and configurations for the training system
 
-import { 
-  DocumentMetadata, 
-  RetrievalResult, 
-  MetadataFilter, 
-} from "./types";
-
-/** Pinecone Integration Service Interface */
-export interface PineconeService {
-  // Admin functions (one-time setup)
-  ingestSOPs(documents: Document[]): Promise<void>;
-  ingestTrainingMaterials(materials: Document[]): Promise<void>;
-  tagDocument(docId: string, metadata: DocumentMetadata): Promise<void>;
-  
-  // Runtime retrieval functions (used during training sessions)
-  retrieveRelevantSOPs(query: string, filters?: MetadataFilter): Promise<RetrievalResult[]>;
-  retrieveTrainingContent(scenario: string, difficulty: string): Promise<RetrievalResult[]>;
-  searchPolicyGuidance(userResponse: string): Promise<RetrievalResult[]>;
-}
-
-/** Session Management Service Interface */
-export interface SessionManager {
-  // Session lifecycle
-  createSession(userId: string): Promise<string>;
-  getSession(sessionId: string): Promise<Record<string, unknown>>;
-  updateSession(sessionId: string, state: Record<string, unknown>): Promise<void>;
-  completeSession(sessionId: string): Promise<void>;
-  
-  // Session cleanup
-  cleanupExpiredSessions(): Promise<void>;
-  getActiveSessions(): Promise<string[]>;
-}
-
-/** Document ingestion interface */
 export interface Document {
-  id: string;
-  content: string;
+  pageContent: string;
   metadata: DocumentMetadata;
 }
 
-/** Agent Configuration Interface */
-export interface AgentConfig {
-  temperature: number;
-  maxTokens: number;
-  model: string;
+export interface DocumentMetadata {
+  source: string;
+  title?: string;
+  section?: string;
+  type?: 'sop' | 'training' | 'policy';
 }
 
-/** Agent Configurations */
-export const AGENT_CONFIGS: Record<string, AgentConfig> = {
+export interface PineconeService {
+  searchSimilarDocuments(query: string, topK?: number): Promise<Document[]>;
+  addDocuments(documents: Document[]): Promise<void>;
+  deleteDocuments(ids: string[]): Promise<void>;
+}
+
+export const AGENT_CONFIGS = {
   scenarioCreator: {
-    temperature: 0.3,
-    maxTokens: 1024,
-    model: "gemini-1.5-flash"
+    model: "gemini-1.5-pro",
+    temperature: 0.7,
+    maxTokens: 2000,
   },
   personaGenerator: {
-    temperature: 0.5,
-    maxTokens: 1024,
-    model: "gemini-1.5-flash"
+    model: "gemini-1.5-pro", 
+    temperature: 0.8,
+    maxTokens: 1500,
   },
   guestSimulator: {
-    temperature: 0.7,
-    maxTokens: 1024,
-    model: "gemini-1.5-flash"
-  },
-  silentScoring: {
-    temperature: 0.1,
-    maxTokens: 512,
-    model: "gemini-1.5-flash"
-  },
-  feedbackGenerator: {
-    temperature: 0.3,
-    maxTokens: 1024,
-    model: "gemini-1.5-flash"
-  },
-  chatAgent: {
+    model: "gemini-1.5-pro",
     temperature: 0.6,
-    maxTokens: 1024,
-    model: "gemini-1.5-flash"
+    maxTokens: 1000,
+  },
+  feedbackAgent: {
+    model: "gemini-1.5-pro",
+    temperature: 0.3,
+    maxTokens: 2500,
+  },
+  scoringAgent: {
+    model: "gemini-1.5-pro",
+    temperature: 0.2,
+    maxTokens: 1500,
   }
 };

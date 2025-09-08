@@ -1,30 +1,30 @@
 "use client";
 
 import React from 'react';
-import { Sun, Moon, Monitor } from 'lucide-react';
-import { Button } from './ui/button';
-import { useTheme } from '../contexts/ThemeContext';
+import { Moon, Sun, Monitor } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
+import { useTheme } from '@/app/contexts/ThemeContext';
 
 interface ThemeToggleProps {
-  variant?: 'default' | 'outline' | 'ghost';
-  size?: 'default' | 'sm' | 'lg' | 'icon';
   className?: string;
 }
 
-export function ThemeToggle({ 
-  variant = 'outline', 
-  size = 'icon',
-  className 
-}: ThemeToggleProps) {
+export function ThemeToggle({ className }: ThemeToggleProps) {
   const { theme, setTheme } = useTheme();
 
   const cycleTheme = () => {
-    if (theme === 'light') {
-      setTheme('dark');
-    } else if (theme === 'dark') {
-      setTheme('system');
-    } else {
-      setTheme('light');
+    switch (theme) {
+      case 'light':
+        setTheme('dark');
+        break;
+      case 'dark':
+        setTheme('system');
+        break;
+      case 'system':
+        setTheme('light');
+        break;
+      default:
+        setTheme('light');
     }
   };
 
@@ -44,11 +44,11 @@ export function ThemeToggle({
   const getAriaLabel = () => {
     switch (theme) {
       case 'light':
-        return 'Switch to dark mode';
+        return 'Switch to dark theme';
       case 'dark':
-        return 'Switch to system mode';
+        return 'Switch to system theme';
       case 'system':
-        return 'Switch to light mode';
+        return 'Switch to light theme';
       default:
         return 'Toggle theme';
     }
@@ -56,11 +56,11 @@ export function ThemeToggle({
 
   return (
     <Button
-      variant={variant}
-      size={size}
+      variant="ghost"
+      size="icon"
       onClick={cycleTheme}
       aria-label={getAriaLabel()}
-      title={`Current theme: ${theme}`}
+      title={`Current theme: ${theme}. Click to cycle themes.`}
       className={className}
     >
       {getIcon()}

@@ -3,17 +3,14 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { SessionStatus, ScenarioData, PersonaData, ScoringMetrics } from '../lib/types';
 import { AppError, classifyError } from '../lib/error-handling';
+import { BaseMessage } from '@langchain/core/messages';
 
 // Training UI State Types
-export type TrainingPhase = 'idle' | 'training' | 'feedback' | 'complete';
+export type TrainingPhase = 'idle' | 'ongoing' | 'complete';
 
 export interface TrainingUIState {
   // Current phase of the training experience
   phase: TrainingPhase;
-  
-  // Active session information
-  activeSessionId?: string;
-  completedSessionId?: string;
   
   // Session status from API
   sessionStatus?: SessionStatus;
@@ -21,16 +18,18 @@ export interface TrainingUIState {
   // Session data
   scenario?: ScenarioData;
   persona?: PersonaData;
-  scores?: ScoringMetrics & { overall: number };
+  // scores?: ScoringMetrics & { overall: number };
   
   // Progress tracking
-  progress: {
-    currentTurn: number;
-    completedSteps: string[];
-    requiredSteps: string[];
-    completionPercentage: number;
-  };
-  
+  // progress: {
+  //   currentTurn: number;
+  //   completedSteps: string[];
+  //   requiredSteps: string[];
+  //   completionPercentage: number;
+  // };
+  // Converstaion History
+  messages: BaseMessage[];
+
   // Session timing
   sessionDuration: number;
   startTime?: Date;
@@ -39,39 +38,27 @@ export interface TrainingUIState {
   error?: AppError;
   
   // UI state flags
-  isPanelFrozen: boolean;
-  showFeedback: boolean;
+  // isPanelFrozen: boolean;
+  // showFeedback: boolean;
   
   // Critical errors
-  criticalErrors: string[];
+  // criticalErrors: string[];
 }
 
 // Action types for state management
 export type TrainingAction =
-  | { type: 'START_SESSION'; sessionId: string }
+  | { type: 'START_SESSION'; data: Partial<TrainingUIState> }
   | { type: 'UPDATE_SESSION_STATUS'; status: SessionStatus }
   | { type: 'UPDATE_SESSION_DATA'; data: Partial<TrainingUIState> }
-  | { type: 'COMPLETE_SESSION'; sessionId: string }
-  | { type: 'ENTER_FEEDBACK_PHASE'; sessionId: string }
-  | { type: 'EXIT_FEEDBACK_PHASE' }
-  | { type: 'FREEZE_PANEL' }
-  | { type: 'UNFREEZE_PANEL' }
+  | { type: 'COMPLETE_SESSION' }
   | { type: 'SET_ERROR'; error?: AppError | string | unknown }
   | { type: 'RESET_SESSION' };
 
 // Initial state (REQUIRED FOR REDUCER)
 const initialState: TrainingUIState = {
   phase: 'idle',
-  progress: {
-    currentTurn: 0,
-    completedSteps: [],
-    requiredSteps: [],
-    completionPercentage: 0,
-  },
+  messages: [],
   sessionDuration: 0,
-  isPanelFrozen: false,
-  showFeedback: false,
-  criticalErrors: [],
 };
 
 // State reducer (my reducer function)
@@ -80,21 +67,10 @@ function trainingReducer(state: TrainingUIState, action: TrainingAction): Traini
     case 'START_SESSION':
       return {
         ...state,
-        phase: 'training',
-        activeSessionId: action.sessionId,
-        completedSessionId: undefined,
-        sessionStatus: 'creating',
+        phase: 'ongoing',
+        sessionStatus: 'active',
         startTime: new Date(),
-        isPanelFrozen: false,
-        showFeedback: false,
-        error: undefined,
-        progress: {
-          currentTurn: 0,
-          completedSteps: [],
-          requiredSteps: [],
-          completionPercentage: 0,
-        },
-        criticalErrors: [],
+        ...action.data,
       };
 
     case 'UPDATE_SESSION_STATUS':
@@ -113,40 +89,7 @@ function trainingReducer(state: TrainingUIState, action: TrainingAction): Traini
       return {
         ...state,
         phase: 'complete',
-        activeSessionId: undefined,
-        completedSessionId: action.sessionId,
         sessionStatus: 'complete',
-        isPanelFrozen: true,
-      };
-
-    case 'ENTER_FEEDBACK_PHASE':
-      return {
-        ...state,
-        phase: 'feedback',
-        completedSessionId: action.sessionId,
-        showFeedback: true,
-        isPanelFrozen: true,
-      };
-
-    case 'EXIT_FEEDBACK_PHASE':
-      return {
-        ...state,
-        phase: 'idle',
-        completedSessionId: undefined,
-        showFeedback: false,
-        isPanelFrozen: false,
-      };
-
-    case 'FREEZE_PANEL':
-      return {
-        ...state,
-        isPanelFrozen: true,
-      };
-
-    case 'UNFREEZE_PANEL':
-      return {
-        ...state,
-        isPanelFrozen: false,
       };
 
     case 'SET_ERROR':
@@ -171,18 +114,13 @@ interface TrainingContextType {
   dispatch: React.Dispatch<TrainingAction>;
   
   // Helper functions
-  startSession: (sessionId: string) => void;
-  completeSession: (sessionId: string) => void;
-  enterFeedbackPhase: (sessionId: string) => void;
-  exitFeedbackPhase: () => void;
+  startSession: (data: Partial<TrainingUIState>) => void;
+  completeSession: () => void;
   updateSessionData: (data: Partial<TrainingUIState>) => void;
   setError: (error?: AppError | string | unknown) => void;
   resetSession: () => void;
   
   // Computed properties
-  isTrainingActive: boolean;
-  isFeedbackActive: boolean;
-  shouldShowMainChat: boolean;
   shouldShowTrainingPanel: boolean;
   panelTitle: string;
   mainChatTitle: string;
@@ -197,25 +135,17 @@ interface TrainingProviderProps {
 }
 
 
-// Actual definition an Business Logic of teh GetxControlelr
+// Actual definition an Business Logic of the GetxControlelr
 export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(trainingReducer, initialState);
 
   // Helper functions
-  const startSession = (sessionId: string) => {
-    dispatch({ type: 'START_SESSION', sessionId });
+  const startSession = (data: Partial<TrainingUIState>) => {
+    dispatch({ type: 'START_SESSION', data });
   };
 
-  const completeSession = (sessionId: string) => {
-    dispatch({ type: 'COMPLETE_SESSION', sessionId });
-  };
-
-  const enterFeedbackPhase = (sessionId: string) => {
-    dispatch({ type: 'ENTER_FEEDBACK_PHASE', sessionId });
-  };
-
-  const exitFeedbackPhase = () => {
-    dispatch({ type: 'EXIT_FEEDBACK_PHASE' });
+  const completeSession = () => {
+    dispatch({ type: 'COMPLETE_SESSION' });
   };
 
   const updateSessionData = (data: Partial<TrainingUIState>) => {
@@ -231,19 +161,14 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
   };
 
   // Computed properties
-  const isTrainingActive = state.phase === 'training' && state.activeSessionId !== undefined;
-  const isFeedbackActive = state.phase === 'feedback' && state.showFeedback;
-  const shouldShowMainChat = state.phase === 'idle' || state.phase === 'feedback';
   const shouldShowTrainingPanel = true; // Always show training panel
   
   const panelTitle = (() => {
     switch (state.phase) {
-      case 'training':
+      case 'ongoing':
         return 'Training Session';
       case 'complete':
         return 'Session Complete';
-      case 'feedback':
-        return 'Training Complete';
       default:
         return 'Training Simulator';
     }
@@ -251,9 +176,7 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
 
   const mainChatTitle = (() => {
     switch (state.phase) {
-      case 'feedback':
-        return 'Training Feedback';
-      case 'training':
+      case 'ongoing':
         return 'Training Session Active';
       default:
         return 'AI Training Simulator';
@@ -262,7 +185,7 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
 
   // Auto-update session duration
   useEffect(() => {
-    if (!state.startTime || state.phase !== 'training') return;
+    if (!state.startTime || state.phase !== 'ongoing') return;
 
     const interval = setInterval(() => {
       const duration = Date.now() - state.startTime!.getTime();
@@ -277,14 +200,9 @@ export const TrainingProvider: React.FC<TrainingProviderProps> = ({ children }) 
     dispatch,
     startSession,
     completeSession,
-    enterFeedbackPhase,
-    exitFeedbackPhase,
     updateSessionData,
     setError,
     resetSession,
-    isTrainingActive,
-    isFeedbackActive,
-    shouldShowMainChat,
     shouldShowTrainingPanel,
     panelTitle,
     mainChatTitle,
