@@ -1,10 +1,9 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { ScrollArea } from "@/app/components/ui/scroll-area"
-import { cn } from "@/app/lib/utils"
-import { BaseMessage, AIMessage, HumanMessage } from "@langchain/core/messages";
-
+import * as React from "react";
+import { ScrollArea } from "@/app/components/ui/scroll-area";
+import { cn } from "@/app/lib/utils";
+import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 
 interface MessageAreaProps {
   messages: BaseMessage[];
@@ -22,26 +21,33 @@ function MessageArea({ messages, className }: MessageAreaProps) {
         )}
       </div>
     </ScrollArea>
-  )
+  );
 }
 
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[300px] sm:min-h-[400px] text-center px-4">
       <div className="space-y-3 sm:space-y-4 max-w-md">
-        <div className="text-3xl sm:text-4xl mb-2 sm:mb-4" role="img" aria-label="Chat bubble">💬</div>
+        <div
+          className="text-3xl sm:text-4xl mb-2 sm:mb-4"
+          role="img"
+          aria-label="Chat bubble"
+        >
+          💬
+        </div>
         <h2 className="text-xl sm:text-2xl font-semibold text-foreground">
           Welcome to STR Virtual Assistant Training
         </h2>
         <p className="text-muted-foreground text-base sm:text-lg leading-relaxed">
-          Start a conversation to begin your training session. Practice handling guest interactions in a safe, simulated environment.
+          Start a conversation to begin your training session. Practice handling
+          guest interactions in a safe, simulated environment.
         </p>
         <p className="text-sm text-muted-foreground">
           Type your message below to get started
         </p>
       </div>
     </div>
-  )
+  );
 }
 
 function MessageList({ messages }: { messages: BaseMessage[] }) {
@@ -51,22 +57,23 @@ function MessageList({ messages }: { messages: BaseMessage[] }) {
         <MessageBubble key={message.id} message={message} />
       ))}
     </div>
-  )
+  );
 }
 
 function MessageBubble({ message }: { message: BaseMessage }) {
-  const isHuman = message instanceof HumanMessage
+  const isHuman = message instanceof HumanMessage;
   return (
-    <div className={cn(
-      "flex w-full",
-      isHuman ? "justify-end" : "justify-start"
-    )}>
-      <div className={cn(
-        "max-w-[85%] sm:max-w-[80%] md:max-w-[70%] rounded-lg px-3 sm:px-4 py-2 text-sm",
-        isHuman 
-          ? "bg-primary text-primary-foreground ml-4 sm:ml-8 md:ml-12" 
-          : "bg-muted text-muted-foreground mr-4 sm:mr-8 md:mr-12"
-      )}>
+    <div
+      className={cn("flex w-full", isHuman ? "justify-end" : "justify-start")}
+    >
+      <div
+        className={cn(
+          "max-w-[85%] sm:max-w-[80%] md:max-w-[70%] rounded-lg px-3 sm:px-4 py-2 text-sm",
+          isHuman
+            ? "bg-primary text-primary-foreground ml-4 sm:ml-8 md:ml-12"
+            : "bg-muted text-muted-foreground mr-4 sm:mr-8 md:mr-12"
+        )}
+      >
         <div className="whitespace-pre-wrap break-words leading-relaxed">
           {message.content.toString()}
         </div>
@@ -81,7 +88,7 @@ function MessageBubble({ message }: { message: BaseMessage }) {
         </div> */}
       </div>
     </div>
-  )
+  );
 }
 
-export { MessageArea}
+export { MessageArea };
