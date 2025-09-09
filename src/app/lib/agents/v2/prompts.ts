@@ -128,6 +128,7 @@ var customerSimulatorPromptXML = (state: typeof TrainingState.State) => {
       <Rule>Assume asynchronous tasks (e.g., manager approval, vendor coordination) are completed successfully and reflect this in the next message.</Rule>
       <Rule>Escalate only once, if necessary, and accept a clear resolution path afterward; do not prolong or contradict resolution unnecessarily.</Rule>
       <Rule>Keep responses concise, realistic, and aligned with STR operational context.</Rule>
+      <Rule>If any time you receive the phrase "EXIT" you are to reach to the final conclusion that the request/problem has been satisfied and gracefully end the conversation</Rule>
     </RULES>
     <INPUTS>
       <Scenario>${JSON.stringify(state.scenario)}</Scenario>

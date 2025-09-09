@@ -6,6 +6,13 @@ export { ThemeToggle } from './ThemeToggle';
 // Chat Interface Components
 export { MessageArea, } from './MessageArea';
 export { MessageInput } from './MessageInput';
+export { CompletionFooter } from './CompletionFooter';
+
+// Feedback Components
+export { FeedbackPanel } from './FeedbackPanel';
+
+// Status Components
+export { TrainingStatusIndicator } from './TrainingStatusIndicator';
 
 // Collapsible Panel Components
 export { CollapsiblePanel } from './CollapsiblePanel';

@@ -118,12 +118,7 @@ const makeAgentNode = <T>({
       new HumanMessage(prompt),
     ]);
 
-    console.log(`<- Agent ${name} response:`, response);
-
     var updatedState = returnFunction(state, response);
-
-    console.log(`🔄 Updated State from ${name}:`, JSON.stringify(updatedState, null, 2));
-    
     // ✅ Special handling for Customer Agent
     if (name === "Customer_Simulator") {
       if (response?.Resolution_Accepted === true) {
@@ -174,15 +169,7 @@ const customerSimulator = makeAgentNode<CustomerSimulatorSchema>({
   responseSchema: customerSimulatorSchema,
   model: customerLLM,
   systemPrompt: customerSimulatorPromptXML, // System prompt omitted for brevity.
-  returnFunction: function (state: typeof TrainingState.State, response: CustomerSimulatorSchema) {
-console.log(`Customer Simulator State:`, JSON.stringify({
-      scenario: state.scenario,
-      persona: state.persona,
-      conversationHistoryLength: state.conversationHistory.length,
-      status: state.status
-    }, null, 2));
-    console.log(`Customer Simulator Response:`, JSON.stringify(response, null, 2));
-    
+  returnFunction: function (state: typeof TrainingState.State, response: CustomerSimulatorSchema) {    
     return {
       ...state,
       conversationHistory: [...state.conversationHistory,
@@ -197,11 +184,16 @@ const feedbackAgent = makeAgentNode<FeedbackSchema>({
   responseSchema: feedbackSchema,
   model: feedbackLLM, // Choose a more reflective/analytical model if available
   systemPrompt: feedbackGeneratorPromptXML,
-  returnFunction: function (state: typeof TrainingState.State, response: any) {
-    return {
+  returnFunction: function (state: typeof TrainingState.State, response: FeedbackSchema) {
+    
+    const updatedState = {
       ...state,
-      trainingFeedback: response // Save structured feedback in state
+      feedback: response
     };
+
+    console.log(`FEEDBACK AGENT UPDATED STATE: ${updatedState}`)
+    
+    return updatedState;
   }
 });
 
@@ -233,11 +225,15 @@ export const workflow = new StateGraph(TrainingState)
   .addConditionalEdges( 
     "customer_simulator", 
     (state: StateType<typeof TrainingState.spec>) => {
-      if (state.status === "completed" || state.status == undefined) { return END; } 
+      console.log("LINE 236  Customer Simulator State Status:", state.status);
+      if (state.status !== "completed" || state.status == undefined) { return "end"; } 
       else { return "feedback_generator"; }
     },
+    {
+      'end': END,
+      'feedback_generator' : 'feedback_generator'
+    }
   ) 
-  .addEdge(START, "scenario_generator") 
   .addEdge("scenario_generator", "persona_generator") 
   .addEdge("persona_generator", "customer_simulator") 
   .addEdge("feedback_generator", END) 
