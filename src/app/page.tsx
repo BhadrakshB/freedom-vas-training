@@ -270,11 +270,9 @@ export default function ChatPage() {
     }
   };
 
-  const handleStartNewSession = () => {
+  const handleStartNewSession = async () => {
     // Reset all training-related state
     setMessages([]);
-    setTrainingStarted(false);
-    setTrainingStatus("start");
     setSessionFeedback(null);
     setScenario(null);
     setPersona(null);
@@ -290,6 +288,9 @@ export default function ChatPage() {
 
     // Reset feedback panel state
     setIsFeedbackPanelCollapsed(false);
+
+    // Automatically start a new training session
+    await handleStartTraining();
   };
 
   const handleRetry = async () => {

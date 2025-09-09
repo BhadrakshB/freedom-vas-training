@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Separator } from "./ui/separator";
 import { cn } from "../lib/utils";
-import { FeedbackSchema } from "../lib/agents/v2/graph_v2";
+import { FeedbackSchema } from "@/lib/agents/v2/graph_v2";
 
 interface FeedbackPanelProps {
   feedback: FeedbackSchema;
@@ -129,7 +129,7 @@ export function FeedbackPanel({
       )}
 
       {/* Strengths and Improvements */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* <div className=""> */}
         {/* Strengths */}
         {feedback.Strengths && feedback.Strengths.length > 0 && (
           <Card>
@@ -173,7 +173,7 @@ export function FeedbackPanel({
             </CardContent>
           </Card>
         )}
-      </div>
+      {/* </div> */}
 
       {/* General Suggestions */}
       {feedback.General_Suggestions && feedback.General_Suggestions.length > 0 && (
