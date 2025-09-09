@@ -2,7 +2,7 @@
 
 import { AIMessage, BaseMessage, MessageContent } from "@langchain/core/messages";
 import { TrainingError, ERROR_MESSAGES } from "../error-handling";
-import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow } from "@/lib/agents/v2/graph_v2"
+import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow, TrainingStateType, FeedbackSchema } from "@/lib/agents/v2/graph_v2"
 
 interface StartTrainingResponse {
   scenario?: ScenarioGeneratorSchema,
@@ -69,6 +69,8 @@ interface UpdateTrainingResponse {
   guestPersona?: PersonaGeneratorSchema,
   messages: BaseMessage[],
   guestResponse: MessageContent,
+  status: TrainingStateType,
+  feedback?: FeedbackSchema,
   error?: string;
   errorType?: string;
   errorCode?: string;
@@ -130,6 +132,9 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
       guestPersona: data?.persona,
       messages: data?.conversationHistory,
       guestResponse: lastMessage,
+      status: data?.status || 'in_progress',
+      feedback: data?.feedback,
+      
     }
 
   } catch (error) {
@@ -140,6 +145,8 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
         guestResponse: "",
         messages: request.messages,
         error: error.message,
+        status: 'error',
+        feedback: undefined,
         errorType: error.type,
         errorCode: error.code,
       };
@@ -150,6 +157,8 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
       messages: request.messages,
       error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
       errorType: 'unknown',
+      status: 'error',
+      feedback: undefined,
     };
   }
 }
