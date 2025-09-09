@@ -5,9 +5,12 @@ import { ThemeToggle } from "./components/ThemeToggle";
 import { MessageArea } from "./components/MessageArea";
 import { MessageInput } from "./components/MessageInput";
 import { Button } from "./components/ui/button";
-
-import { Textarea } from "./components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import {
+  CustomScenarioPanel,
+  CustomPersonaPanel,
+  ScenarioDisplayPanel,
+  PersonaDisplayPanel,
+} from "./components";
 import {
   startTrainingSession,
   updateTrainingSession,
@@ -15,7 +18,6 @@ import {
   refinePersona,
 } from "./lib/actions/training-actions";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
-import { Sparkles } from "lucide-react";
 import { ScenarioGeneratorSchema, PersonaGeneratorSchema } from "./lib/agents/v2/graph_v2";
 
 export default function ChatPage() {
@@ -270,149 +272,47 @@ export default function ChatPage() {
         </footer>
       )}
 
-      {/* Floating Panels */}
+      {/* Floating Collapsible Panels */}
       <div className="absolute right-4 top-20 bottom-4 w-80 flex flex-col gap-4 z-10 overflow-y-auto pointer-events-none">
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto space-y-4">
           {!trainingStarted ? (
             <>
               {/* Custom Scenario Input Panel */}
-              <Card className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 border shadow-lg mb-4">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium flex items-center justify-between">
-                    Custom Scenario
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRefineScenario}
-                      disabled={
-                        isLoading ||
-                        isRefiningScenario ||
-                        !customScenario.trim()
-                      }
-                      className="h-7 px-2 text-xs"
-                    >
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      {isRefiningScenario ? "Refining..." : "Refine"}
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <Textarea
-                    placeholder="e.g., Guest complaining about noise from neighboring unit..."
-                    value={customScenario}
-                    onChange={(e) => setCustomScenario(e.target.value)}
-                    className="min-h-24 text-sm"
-                    disabled={isLoading || isRefiningScenario}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Leave blank for AI-generated scenario or use the refine
-                    button to enhance your input
-                  </p>
-                </CardContent>
-              </Card>
+              <CustomScenarioPanel
+                value={customScenario}
+                onChange={setCustomScenario}
+                onRefine={handleRefineScenario}
+                isRefining={isRefiningScenario}
+                disabled={isLoading}
+                defaultOpen={false}
+              />
 
               {/* Custom Persona Input Panel */}
-              <Card className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 border shadow-lg">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium flex items-center justify-between">
-                    Custom Guest Persona
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleRefinePersona}
-                      disabled={
-                        isLoading || isRefiningPersona || !customPersona.trim()
-                      }
-                      className="h-7 px-2 text-xs"
-                    >
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      {isRefiningPersona ? "Refining..." : "Refine"}
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <Textarea
-                    placeholder="e.g., Frustrated business traveler, first-time Airbnb user..."
-                    value={customPersona}
-                    onChange={(e) => setCustomPersona(e.target.value)}
-                    className="text-sm"
-                    disabled={isLoading || isRefiningPersona}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Leave blank for AI-generated persona or use the refine
-                    button to enhance your input
-                  </p>
-                </CardContent>
-              </Card>
+              <CustomPersonaPanel
+                value={customPersona}
+                onChange={setCustomPersona}
+                onRefine={handleRefinePersona}
+                isRefining={isRefiningPersona}
+                disabled={isLoading}
+                defaultOpen={false}
+              />
             </>
           ) : (
             <>
               {/* Generated Scenario Display Panel */}
               {scenario && (
-                <Card className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 border shadow-lg mb-4">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">
-                      Training Scenario
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-3">
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Title
-                      </h4>
-                      <p className="text-sm">{scenario.scenario_title}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Situation
-                      </h4>
-                      <p className="text-sm">{scenario.guest_situation}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Difficulty
-                      </h4>
-                      <p className="text-sm">{scenario.difficulty_level}</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <ScenarioDisplayPanel
+                  scenario={scenario}
+                  defaultOpen={false}
+                />
               )}
 
               {/* Generated Persona Display Panel */}
               {persona && (
-                <Card className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 border shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">
-                      Guest Persona
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-3">
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Name
-                      </h4>
-                      <p className="text-sm">{persona.name}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Demographics
-                      </h4>
-                      <p className="text-sm">{persona.demographics}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Emotional Tone
-                      </h4>
-                      <p className="text-sm">{persona.emotional_tone}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                        Communication Style
-                      </h4>
-                      <p className="text-sm">{persona.communication_style}</p>
-                    </div>
-                  </CardContent>
-                </Card>
+                <PersonaDisplayPanel
+                  persona={persona}
+                  defaultOpen={false}
+                />
               )}
             </>
           )}
