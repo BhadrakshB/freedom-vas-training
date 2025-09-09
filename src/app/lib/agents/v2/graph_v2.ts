@@ -126,13 +126,13 @@ const makeAgentNode = <T>({
     // ✅ Special handling for Customer Agent
     if (name === "Customer_Simulator") {
       if (response?.Resolution_Accepted === true) {
-        updatedState = {
-          ...state,
+
+        console.log("✅ Training marked successful because resolution was accepted.");
+        return  {
           ...updatedState,
 
           status: 'completed', // mark training as successful
         };
-        console.log("✅ Training marked successful because resolution was accepted.");
       }
     }
 
