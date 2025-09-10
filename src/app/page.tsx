@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { MessageArea } from "./components/MessageArea";
 import { MessageInput } from "./components/MessageInput";
@@ -11,10 +11,9 @@ import {
   ScenarioDisplayPanel,
   PersonaDisplayPanel,
   CompletionFooter,
-  FeedbackPanel,
+  FeedbackDisplayPanel,
   TrainingStatusIndicator,
 } from "./components";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   startTrainingSession,
   updateTrainingSession,
@@ -101,29 +100,75 @@ export default function ChatPage() {
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(
     null
   );
-  const [isFeedbackPanelCollapsed, setIsFeedbackPanelCollapsed] =
-    useState(false);
+  const [panelWidth, setPanelWidth] = useState(320); // Default width in pixels
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<HTMLDivElement>(null);
 
   // Computed properties for training state
   const isSessionCompleted = trainingStatus === "completed";
   const isSessionError = trainingStatus === "error";
   const isTrainingActive = trainingStarted && trainingStatus === "ongoing";
 
+  // Resize handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return;
+
+      const containerRect =
+        resizeRef.current?.parentElement?.getBoundingClientRect();
+      if (!containerRect) return;
+
+      const newWidth = containerRect.right - e.clientX;
+      const minWidth = 280; // Minimum panel width
+      const maxWidth = Math.min(600, containerRect.width * 0.6); // Maximum 60% of container width
+
+      setPanelWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
+    },
+    [isResizing]
+  );
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  // Add global mouse event listeners for resizing
+  React.useEffect(() => {
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      return () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
+
   const handleStartTraining = async () => {
     setIsLoading(true);
 
     try {
-      const params: { customScenario?: string; customPersona?: string } = {};
-
-      if (customScenario.trim()) {
-        params.customScenario = customScenario.trim();
+      const requestData: {
+        scenario?: ScenarioGeneratorSchema;
+        guestPersona?: PersonaGeneratorSchema;
+      } = {};
+      if (scenario !== null) {
+        requestData.scenario = scenario;
+      }
+      if (persona !== null) {
+        requestData.guestPersona = persona;
       }
 
-      if (customPersona.trim()) {
-        params.customPersona = customPersona.trim();
-      }
-
-      const result = await startTrainingSession(params);
+      const result = await startTrainingSession(requestData);
 
       if (result.error) {
         throw new Error(result.error);
@@ -286,9 +331,6 @@ export default function ChatPage() {
     setErrorType(null);
     setLastFailedMessage(null);
 
-    // Reset feedback panel state
-    setIsFeedbackPanelCollapsed(false);
-
     // Automatically start a new training session
     await handleStartTraining();
   };
@@ -354,6 +396,7 @@ export default function ChatPage() {
       }
 
       if (result.refinedScenario) {
+        setScenario(result.refinedScenario);
         // Update the scenario text with the refined version
         const refinedText = formatRefinedScenario(result.refinedScenario);
         setCustomScenario(refinedText);
@@ -389,6 +432,7 @@ export default function ChatPage() {
       }
 
       if (result.refinedPersona) {
+        setPersona(result.refinedPersona);
         // Update the persona text with the refined version
         const refinedText = formatRefinedPersona(result.refinedPersona);
         setCustomPersona(refinedText);
@@ -468,7 +512,11 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-background relative">
+    <div
+      className={`h-screen flex flex-col bg-background relative ${
+        isResizing ? "select-none" : ""
+      }`}
+    >
       {/* Header Section */}
       <header className="flex items-center justify-between p-3 sm:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground truncate pr-2">
@@ -502,52 +550,10 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Main Content Area with Feedback Panel */}
+      {/* Main Content Area */}
       <main className="flex-1 overflow-hidden flex">
-        {/* Left Feedback Panel - Collapsible */}
-        {isSessionCompleted && sessionFeedback && (
-          <div
-            className={`${
-              isFeedbackPanelCollapsed ? "w-12" : "w-96"
-            } border-r bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col transition-all duration-300 ease-in-out`}
-          >
-            {/* Panel Header with Toggle */}
-            <div className="flex items-center justify-between p-3 border-b bg-background/80">
-              {!isFeedbackPanelCollapsed && (
-                <h3 className="font-semibold text-sm text-foreground">
-                  Training Feedback
-                </h3>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setIsFeedbackPanelCollapsed(!isFeedbackPanelCollapsed)
-                }
-                className="h-8 w-8 p-0 hover:bg-muted"
-              >
-                {isFeedbackPanelCollapsed ? (
-                  <ChevronRight className="h-4 w-4" />
-                ) : (
-                  <ChevronLeft className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-
-            {/* Panel Content */}
-            {!isFeedbackPanelCollapsed && (
-              <div className="flex-1 overflow-y-auto p-4">
-                <FeedbackPanel
-                  feedback={sessionFeedback}
-                  onStartNewSession={handleStartNewSession}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Main Message Area */}
-        <div className="flex-1 overflow-hidden">
+        {/* Left Side - Chat Area */}
+        <div className="flex-1 overflow-hidden flex flex-col">
           {!trainingStarted ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center space-y-4">
@@ -555,8 +561,8 @@ export default function ChatPage() {
                   Ready to Start Training?
                 </h2>
                 <p className="text-muted-foreground max-w-md">
-                  Customize your training using the floating panels, or leave
-                  them blank for AI-generated content.
+                  Customize your training using the panels on the right, or
+                  leave them blank for AI-generated content.
                 </p>
                 <Button
                   onClick={() => {
@@ -584,12 +590,7 @@ export default function ChatPage() {
               <div className="flex-1 overflow-hidden">
                 <MessageArea messages={messages} className="h-full" />
               </div>
-            </div>
-          )}
-        </div>
-      </main>
-
-      {/* Footer - Message Input or Completion Footer */}
+              {/* Footer - Message Input or Completion Footer */}
       {trainingStarted && (
         <footer className="shrink-0">
           {isSessionCompleted || isSessionError ? (
@@ -610,47 +611,91 @@ export default function ChatPage() {
           )}
         </footer>
       )}
-
-      {/* Floating Collapsible Panels */}
-      <div className="absolute right-4 top-20 bottom-4 w-80 flex flex-col gap-4 z-10 overflow-y-auto pointer-events-none">
-        <div className="pointer-events-auto space-y-4">
-          {!trainingStarted ? (
-            <>
-              {/* Custom Scenario Input Panel */}
-              <CustomScenarioPanel
-                value={customScenario}
-                onChange={setCustomScenario}
-                onRefine={handleRefineScenario}
-                isRefining={isRefiningScenario}
-                disabled={isLoading}
-                defaultOpen={false}
-              />
-
-              {/* Custom Persona Input Panel */}
-              <CustomPersonaPanel
-                value={customPersona}
-                onChange={setCustomPersona}
-                onRefine={handleRefinePersona}
-                isRefining={isRefiningPersona}
-                disabled={isLoading}
-                defaultOpen={false}
-              />
-            </>
-          ) : (
-            <>
-              {/* Generated Scenario Display Panel */}
-              {scenario && (
-                <ScenarioDisplayPanel scenario={scenario} defaultOpen={false} />
-              )}
-
-              {/* Generated Persona Display Panel */}
-              {persona && (
-                <PersonaDisplayPanel persona={persona} defaultOpen={false} />
-              )}
-            </>
+            </div>
           )}
         </div>
-      </div>
+
+        {/* Resize Handle */}
+        <div
+          className={`w-1 cursor-col-resize transition-all relative group ${
+            isResizing ? "bg-primary w-2" : "bg-border hover:bg-primary/50"
+          }`}
+          onMouseDown={handleMouseDown}
+          ref={resizeRef}
+        >
+          <div
+            className={`absolute inset-y-0 -left-2 -right-2 transition-colors ${
+              isResizing ? "bg-primary/30" : "group-hover:bg-primary/10"
+            }`}
+          />
+
+          {/* Visual grip dots */}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex flex-col gap-1">
+              <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
+              <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
+              <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side - Panels Section */}
+        <div
+          className="border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col"
+          style={{ width: `${panelWidth}px` }}
+        >
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {!trainingStarted ? (
+              <>
+                {/* Custom Scenario Input Panel */}
+                <CustomScenarioPanel
+                  value={customScenario}
+                  onChange={setCustomScenario}
+                  onRefine={handleRefineScenario}
+                  isRefining={isRefiningScenario}
+                  disabled={isLoading}
+                  defaultOpen={false}
+                />
+
+                {/* Custom Persona Input Panel */}
+                <CustomPersonaPanel
+                  value={customPersona}
+                  onChange={setCustomPersona}
+                  onRefine={handleRefinePersona}
+                  isRefining={isRefiningPersona}
+                  disabled={isLoading}
+                  defaultOpen={false}
+                />
+              </>
+            ) : (
+              <>
+                {/* Feedback Display Panel - shown when session is completed */}
+                {isSessionCompleted && sessionFeedback && (
+                  <FeedbackDisplayPanel
+                    feedback={sessionFeedback}
+                    onStartNewSession={handleStartNewSession}
+                    defaultOpen={true}
+                  />
+                )}
+                {/* Generated Scenario Display Panel */}
+                {scenario && (
+                  <ScenarioDisplayPanel
+                    scenario={scenario}
+                    defaultOpen={false}
+                  />
+                )}
+
+                {/* Generated Persona Display Panel */}
+                {persona && (
+                  <PersonaDisplayPanel persona={persona} defaultOpen={false} />
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </main>
+
+      
     </div>
   );
 }

@@ -15,8 +15,8 @@ interface StartTrainingResponse {
 }
 
 interface StartTrainingRequest {
-  customScenario?: string;
-  customPersona?: string;
+  scenario?: ScenarioGeneratorSchema;
+  guestPersona?: PersonaGeneratorSchema;
 }
 
 export async function startTrainingSession(request?: StartTrainingRequest): Promise<StartTrainingResponse> {
@@ -24,8 +24,8 @@ export async function startTrainingSession(request?: StartTrainingRequest): Prom
 
     const data = await workflow.invoke({
       conversationHistory: [],
-      customScenario: request?.customScenario,
-      customPersona: request?.customPersona,
+      scenario: request?.scenario,
+      persona: request?.guestPersona
     });
 
     console.log("=== WORKFLOW STATE RETURNED ===");

@@ -198,11 +198,15 @@ const feedbackAgent = makeAgentNode<FeedbackSchema>({
 });
 
 // Conditional logic to check if scenario and persona exist
-const checkState = (state: StateType<typeof TrainingState.spec>) => {
+const checkStateInitial = (state: StateType<typeof TrainingState.spec>) => {
   if (state.scenario && state.persona) {
     console.log("Scenario and Persona exist. Skipping generators.");
     return "customer_simulator";
-  } else {
+  } if (state.scenario && !state.persona) return "persona_generator";
+  if (!state.scenario && state.persona) return "scenario_generator";
+
+  
+  else {
     console.log("Scenario and Persona do not exist. Starting generation.");
     return "scenario_generator";
   }
@@ -216,12 +220,25 @@ export const workflow = new StateGraph(TrainingState)
   .addNode("feedback_generator", feedbackAgent) 
   .addConditionalEdges( 
     START, 
-    checkState, 
+    checkStateInitial, 
     { 
       "customer_simulator": "customer_simulator", 
-      "scenario_generator": "scenario_generator" 
+      "scenario_generator": "scenario_generator" ,
+      "persona_generator": "persona_generator"
     }
   ) 
+.addConditionalEdges(
+    "scenario_generator",
+    (state: StateType<typeof TrainingState.spec>) => {
+      if (!state.persona) return "persona_generator";
+      else return "customer_simulator";
+    },
+    {
+      "persona_generator": "persona_generator",
+      "customer_simulator": "customer_simulator"
+    }
+  )
+
   .addConditionalEdges( 
     "customer_simulator", 
     (state: StateType<typeof TrainingState.spec>) => {
@@ -234,7 +251,6 @@ export const workflow = new StateGraph(TrainingState)
       'feedback_generator' : 'feedback_generator'
     }
   ) 
-  .addEdge("scenario_generator", "persona_generator") 
   .addEdge("persona_generator", "customer_simulator") 
   .addEdge("feedback_generator", END) 
   .compile();

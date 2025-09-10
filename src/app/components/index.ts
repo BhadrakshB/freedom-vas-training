@@ -10,6 +10,7 @@ export { CompletionFooter } from './CompletionFooter';
 
 // Feedback Components
 export { FeedbackPanel } from './FeedbackPanel';
+export { FeedbackDisplayPanel } from './FeedbackDisplayPanel';
 
 // Status Components
 export { TrainingStatusIndicator } from './TrainingStatusIndicator';
