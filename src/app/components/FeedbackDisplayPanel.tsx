@@ -65,17 +65,17 @@ export function FeedbackDisplayPanel({
                 Strengths
               </h4>
               <ul className="space-y-1">
-                {feedback.Strengths.slice(0, 3).map((strength, index) => (
+                {feedback.Strengths.map((strength, index) => (
                   <li key={index} className="flex items-start gap-2 text-xs">
                     <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                     <span className="text-muted-foreground">{strength}</span>
                   </li>
                 ))}
-                {feedback.Strengths.length > 3 && (
+                {/* {feedback.Strengths.length > 3 && (
                   <li className="text-xs text-muted-foreground/70 ml-5">
                     +{feedback.Strengths.length - 3} more strengths...
                   </li>
-                )}
+                )} */}
               </ul>
             </div>
           )}
@@ -88,17 +88,17 @@ export function FeedbackDisplayPanel({
                 Areas for Improvement
               </h4>
               <ul className="space-y-1">
-                {feedback.Areas_For_Improvement.slice(0, 3).map((area, index) => (
+                {feedback.Areas_For_Improvement.map((area, index) => (
                   <li key={index} className="flex items-start gap-2 text-xs">
                     <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                     <span className="text-muted-foreground">{area}</span>
                   </li>
                 ))}
-                {feedback.Areas_For_Improvement.length > 3 && (
+                {/* {feedback.Areas_For_Improvement.length > 3 && (
                   <li className="text-xs text-muted-foreground/70 ml-5">
                     +{feedback.Areas_For_Improvement.length - 3} more areas...
                   </li>
-                )}
+                )} */}
               </ul>
             </div>
           )}
