@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useCallback, useRef, useContext } from "react";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { MessageArea } from "./components/MessageArea";
 import { MessageInput } from "./components/MessageInput";
@@ -28,6 +28,7 @@ import {
   FeedbackSchema,
 } from "./lib/agents/v2/graph_v2";
 import { TrainingError, ErrorType, classifyError } from "./lib/error-handling";
+import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
 
 // Helper functions for error handling
 function isRetryableError(errorType: ErrorType): boolean {
@@ -78,30 +79,45 @@ function getContextualErrorMessage(
   }
 }
 
-export default function ChatPage() {
-  const [messages, setMessages] = useState<BaseMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [trainingStarted, setTrainingStarted] = useState(false);
-  const [trainingStatus, setTrainingStatus] =
-    useState<TrainingStateType>("start");
-  const [sessionFeedback, setSessionFeedback] = useState<FeedbackSchema | null>(
-    null
-  );
-  const [scenario, setScenario] = useState<ScenarioGeneratorSchema | null>(
-    null
-  );
-  const [persona, setPersona] = useState<PersonaGeneratorSchema | null>(null);
-  const [customScenario, setCustomScenario] = useState("");
-  const [customPersona, setCustomPersona] = useState("");
-  const [isRefiningScenario, setIsRefiningScenario] = useState(false);
-  const [isRefiningPersona, setIsRefiningPersona] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [errorType, setErrorType] = useState<ErrorType | null>(null);
-  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(
-    null
-  );
-  const [panelWidth, setPanelWidth] = useState(320); // Default width in pixels
-  const [isResizing, setIsResizing] = useState(false);
+function ChatPage() {
+  const {
+    // State
+    messages,
+    isLoading,
+    trainingStarted,
+    trainingStatus,
+    sessionFeedback,
+    scenario,
+    persona,
+    customScenario,
+    customPersona,
+    isRefiningScenario,
+    isRefiningPersona,
+    errorMessage,
+    errorType,
+    lastFailedMessage,
+    panelWidth,
+    isResizing,
+    // Actions
+    setMessages,
+    setIsLoading,
+    setTrainingStarted,
+    setTrainingStatus,
+    setSessionFeedback,
+    setScenario,
+    setPersona,
+    setCustomScenario,
+    setCustomPersona,
+    setIsRefiningScenario,
+    setIsRefiningPersona,
+    setError,
+    clearError,
+    setLastFailedMessage,
+    setPanelWidth,
+    setIsResizing,
+    resetSession,
+  } = useContext(trainingContext);
+
   const resizeRef = useRef<HTMLDivElement>(null);
 
   // Computed properties for training state
@@ -110,10 +126,13 @@ export default function ChatPage() {
   const isTrainingActive = trainingStarted && trainingStatus === "ongoing";
 
   // Resize handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  }, []);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsResizing(true);
+    },
+    [setIsResizing]
+  );
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -129,12 +148,12 @@ export default function ChatPage() {
 
       setPanelWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
     },
-    [isResizing]
+    [isResizing, setPanelWidth]
   );
 
   const handleMouseUp = useCallback(() => {
     setIsResizing(false);
-  }, []);
+  }, [setIsResizing]);
 
   // Add global mouse event listeners for resizing
   React.useEffect(() => {
@@ -194,20 +213,20 @@ export default function ChatPage() {
       setTrainingStatus("error");
 
       // Classify and store error information
-      const errorType = classifyError(error);
-      setErrorType(errorType);
+      const errorTypeClassified = classifyError(error);
 
       let errorMessage =
         "Sorry, there was an error starting the training session.";
       if (error instanceof TrainingError) {
-        setErrorMessage(error.message);
+        setError(error.message, errorTypeClassified);
         errorMessage = error.message;
       } else if (error instanceof Error) {
-        setErrorMessage(error.message);
+        setError(error.message, errorTypeClassified);
         errorMessage = error.message;
       } else {
-        setErrorMessage(
-          "An unexpected error occurred while starting the training session."
+        setError(
+          "An unexpected error occurred while starting the training session.",
+          errorTypeClassified
         );
       }
 
@@ -231,8 +250,7 @@ export default function ChatPage() {
     setIsLoading(true);
 
     // Clear previous error state when attempting new message
-    setErrorMessage(null);
-    setErrorType(null);
+    clearError();
     setLastFailedMessage(null);
 
     try {
@@ -247,15 +265,14 @@ export default function ChatPage() {
 
         // Store error information for retry functionality
         setLastFailedMessage(content);
-        const errorType =
+        const errorTypeClassified =
           (result.errorType as ErrorType) ||
           classifyError(new Error(result.error));
-        setErrorType(errorType);
-        setErrorMessage(result.error);
+        setError(result.error, errorTypeClassified);
 
         throw new TrainingError(
           result.error,
-          errorType,
+          errorTypeClassified,
           "medium",
           result.errorCode
         );
@@ -274,7 +291,7 @@ export default function ChatPage() {
         `${(result.guestResponse as string) || "No response received."}`
       );
 
-      setMessages((prev) => [...prev, guestMessage]);
+      setMessages([...messages, guestMessage]);
     } catch (error) {
       console.error("Error updating training session:", error);
       setTrainingStatus("error");
@@ -283,53 +300,38 @@ export default function ChatPage() {
       setLastFailedMessage(content);
 
       // Classify and store error information
-      let errorType: ErrorType;
-      let errorMessage: string;
+      let errorTypeClassified: ErrorType;
+      let errorMessageText: string;
 
       if (error instanceof TrainingError) {
-        errorType = error.type;
-        errorMessage = error.message;
-        setErrorType(errorType);
-        setErrorMessage(errorMessage);
+        errorTypeClassified = error.type;
+        errorMessageText = error.message;
+        setError(errorMessageText, errorTypeClassified);
       } else if (error instanceof Error) {
-        errorType = classifyError(error);
-        errorMessage = getErrorMessage(errorType, error.message);
-        setErrorType(errorType);
-        setErrorMessage(errorMessage);
+        errorTypeClassified = classifyError(error);
+        errorMessageText = getErrorMessage(errorTypeClassified, error.message);
+        setError(errorMessageText, errorTypeClassified);
       } else {
-        errorType = "unknown";
-        errorMessage =
+        errorTypeClassified = "unknown";
+        errorMessageText =
           "An unexpected error occurred while processing your message.";
-        setErrorType(errorType);
-        setErrorMessage(errorMessage);
+        setError(errorMessageText, errorTypeClassified);
       }
 
       // Add contextual error message to chat based on error type
       const chatErrorMessage: AIMessage = new AIMessage(
-        getContextualErrorMessage(errorType, errorMessage)
+        getContextualErrorMessage(errorTypeClassified, errorMessageText)
       );
 
-      setMessages((prev) => [...prev, chatErrorMessage]);
+      setMessages([...messages, chatErrorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleStartNewSession = async () => {
-    // Reset all training-related state
-    setMessages([]);
-    setSessionFeedback(null);
-    setScenario(null);
-    setPersona(null);
-    setCustomScenario("");
-    setCustomPersona("");
-    setIsRefiningScenario(false);
-    setIsRefiningPersona(false);
-
-    // Reset error state
-    setErrorMessage(null);
-    setErrorType(null);
-    setLastFailedMessage(null);
+    // Reset all training-related state using context
+    resetSession();
 
     // Automatically start a new training session
     await handleStartTraining();
@@ -372,14 +374,13 @@ export default function ChatPage() {
         (lastMessage.content as string).toLowerCase().includes("sorry");
 
       if (isErrorMessage) {
-        setMessages((prev) => prev.slice(0, -1));
+        setMessages(messages.slice(0, -1));
       }
     }
 
     // Reset error state and retry the message
     setTrainingStatus("ongoing");
-    setErrorMessage(null);
-    setErrorType(null);
+    clearError();
 
     await handleSendMessage(messageToRetry);
   };
@@ -405,15 +406,20 @@ export default function ChatPage() {
       console.error("Error refining scenario:", error);
 
       // Set error state for user feedback
-      const errorType = classifyError(error);
-      setErrorType(errorType);
+      const errorTypeClassified = classifyError(error);
 
       if (error instanceof TrainingError) {
-        setErrorMessage(error.message);
+        setError(error.message, errorTypeClassified);
       } else if (error instanceof Error) {
-        setErrorMessage(getErrorMessage(errorType, error.message));
+        setError(
+          getErrorMessage(errorTypeClassified, error.message),
+          errorTypeClassified
+        );
       } else {
-        setErrorMessage("Failed to refine scenario. Please try again.");
+        setError(
+          "Failed to refine scenario. Please try again.",
+          errorTypeClassified
+        );
       }
     } finally {
       setIsRefiningScenario(false);
@@ -441,15 +447,20 @@ export default function ChatPage() {
       console.error("Error refining persona:", error);
 
       // Set error state for user feedback
-      const errorType = classifyError(error);
-      setErrorType(errorType);
+      const errorTypeClassified = classifyError(error);
 
       if (error instanceof TrainingError) {
-        setErrorMessage(error.message);
+        setError(error.message, errorTypeClassified);
       } else if (error instanceof Error) {
-        setErrorMessage(getErrorMessage(errorType, error.message));
+        setError(
+          getErrorMessage(errorTypeClassified, error.message),
+          errorTypeClassified
+        );
       } else {
-        setErrorMessage("Failed to refine persona. Please try again.");
+        setError(
+          "Failed to refine persona. Please try again.",
+          errorTypeClassified
+        );
       }
     } finally {
       setIsRefiningPersona(false);
@@ -591,26 +602,26 @@ export default function ChatPage() {
                 <MessageArea messages={messages} className="h-full" />
               </div>
               {/* Footer - Message Input or Completion Footer */}
-      {trainingStarted && (
-        <footer className="shrink-0">
-          {isSessionCompleted || isSessionError ? (
-            <CompletionFooter
-              status={trainingStatus}
-              onStartNewSession={handleStartNewSession}
-              onRetry={isSessionError ? handleRetry : undefined}
-            />
-          ) : (
-            <MessageInput
-              onSendMessage={(message) => {
-                handleSendMessage(message);
-              }}
-              placeholder="Type your message to the guest..."
-              className="border-t-0"
-              disabled={isLoading}
-            />
-          )}
-        </footer>
-      )}
+              {trainingStarted && (
+                <footer className="shrink-0">
+                  {isSessionCompleted || isSessionError ? (
+                    <CompletionFooter
+                      status={trainingStatus}
+                      onStartNewSession={handleStartNewSession}
+                      onRetry={isSessionError ? handleRetry : undefined}
+                    />
+                  ) : (
+                    <MessageInput
+                      onSendMessage={(message) => {
+                        handleSendMessage(message);
+                      }}
+                      placeholder="Type your message to the guest..."
+                      className="border-t-0"
+                      disabled={isLoading}
+                    />
+                  )}
+                </footer>
+              )}
             </div>
           )}
         </div>
@@ -694,8 +705,14 @@ export default function ChatPage() {
           </div>
         </div>
       </main>
-
-      
     </div>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <TrainingProvider>
+      <ChatPage></ChatPage>
+    </TrainingProvider>
   );
 }
