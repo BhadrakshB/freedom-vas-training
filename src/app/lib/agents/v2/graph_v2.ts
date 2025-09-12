@@ -199,6 +199,9 @@ const feedbackAgent = makeAgentNode<FeedbackSchema>({
 
 // Conditional logic to check if scenario and persona exist
 const checkStateInitial = (state: StateType<typeof TrainingState.spec>) => {
+
+  if (state.status === "completed") return "feedback_generator";
+
   if (state.scenario && state.persona) {
     console.log("Scenario and Persona exist. Skipping generators.");
     return "customer_simulator";
@@ -224,7 +227,8 @@ export const workflow = new StateGraph(TrainingState)
     { 
       "customer_simulator": "customer_simulator", 
       "scenario_generator": "scenario_generator" ,
-      "persona_generator": "persona_generator"
+      "persona_generator": "persona_generator",
+      "feedback_generator": "feedback_generator",
     }
   ) 
 .addConditionalEdges(

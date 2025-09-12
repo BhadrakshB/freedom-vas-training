@@ -55,7 +55,7 @@ export class ChatAgent {
   private llm: ChatGoogleGenerativeAI;
 
   constructor(apiKey?: string) {
-    const config = AGENT_CONFIGS.chatAgent;
+    const config = AGENT_CONFIGS.guestSimulator;
     this.llm = new ChatGoogleGenerativeAI({
       model: config.model,
       apiKey: apiKey || process.env.GOOGLE_API_KEY!,

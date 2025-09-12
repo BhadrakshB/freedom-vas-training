@@ -1,11 +1,14 @@
 import React from 'react';
-import { CheckCircle, Clock, AlertCircle, Play } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Play, Square } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TrainingStateType } from '../lib/agents/v2/graph_v2';
+import { Button } from './ui/button';
 
 interface TrainingStatusIndicatorProps {
   status: TrainingStateType;
   className?: string;
+  onEndTraining?: () => void;
+  isEndingTraining?: boolean;
 }
 
 const statusConfig = {
@@ -35,25 +38,44 @@ const statusConfig = {
   }
 } as const;
 
-export function TrainingStatusIndicator({ status, className }: TrainingStatusIndicatorProps) {
+export function TrainingStatusIndicator({ 
+  status, 
+  className, 
+  onEndTraining, 
+  isEndingTraining = false 
+}: TrainingStatusIndicatorProps) {
   const config = statusConfig[status];
   const Icon = config.icon;
 
   return (
-    <div
-      className={cn(
-        'inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium',
-        config.color,
-        className
+    <div className={cn('inline-flex items-center gap-3', className)}>
+      <div
+        className={cn(
+          'inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium',
+          config.color
+        )}
+        role="status"
+        aria-label={config.ariaLabel}
+      >
+        <Icon 
+          className="h-4 w-4" 
+          aria-hidden="true"
+        />
+        <span>{config.label}</span>
+      </div>
+      
+      {status === 'ongoing' && onEndTraining && (
+        <Button
+          onClick={onEndTraining}
+          disabled={isEndingTraining}
+          size="sm"
+          variant="outline"
+          className="text-xs"
+        >
+          <Square className="h-3 w-3 mr-1" />
+          {isEndingTraining ? 'Ending...' : 'End Training'}
+        </Button>
       )}
-      role="status"
-      aria-label={config.ariaLabel}
-    >
-      <Icon 
-        className="h-4 w-4" 
-        aria-hidden="true"
-      />
-      <span>{config.label}</span>
     </div>
   );
 }

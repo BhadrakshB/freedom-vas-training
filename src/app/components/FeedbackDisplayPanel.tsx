@@ -7,6 +7,76 @@ import { CollapsiblePanel } from "./CollapsiblePanel";
 import { Separator } from "./ui/separator";
 import { FeedbackSchema } from "@/lib/agents/v2/graph_v2";
 
+// Helper component for Areas for Improvement section
+function AreasForImprovementSection({ areas }: { areas: string[] }) {
+  const [showAllImprovements, setShowAllImprovements] = React.useState(false);
+  
+  return (
+    <div className="space-y-2">
+      <h4 className="font-medium text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+        <Target className="h-3 w-3" />
+        Areas for Improvement
+      </h4>
+      <ul className="space-y-1">
+        {(showAllImprovements ? areas : areas.slice(0, 2)).map((area, index) => (
+          <li key={index} className="flex items-start gap-2 text-xs">
+            <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+            <span className="text-muted-foreground">{area}</span>
+          </li>
+        ))}
+        {areas.length > 2 && (
+          <li className="text-xs ml-5">
+            <button
+              onClick={() => setShowAllImprovements(!showAllImprovements)}
+              className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              {showAllImprovements 
+                ? "Show fewer areas..." 
+                : `+${areas.length - 2} more areas...`
+              }
+            </button>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+// Helper component for General Suggestions section
+function GeneralSuggestionsSection({ suggestions }: { suggestions: string[] }) {
+  const [showAllSuggestions, setShowAllSuggestions] = React.useState(false);
+  
+  return (
+    <div className="space-y-2">
+      <h4 className="font-medium text-xs flex items-center gap-1">
+        <Lightbulb className="h-3 w-3" />
+        Suggestions
+      </h4>
+      <ul className="space-y-1">
+        {(showAllSuggestions ? suggestions : suggestions.slice(0, 2)).map((suggestion, index) => (
+          <li key={index} className="flex items-start gap-2 text-xs">
+            <Lightbulb className="h-3 w-3 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+            <span className="text-muted-foreground">{suggestion}</span>
+          </li>
+        ))}
+        {suggestions.length > 2 && (
+          <li className="text-xs ml-5">
+            <button
+              onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+              className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              {showAllSuggestions 
+                ? "Show fewer suggestions..." 
+                : `+${suggestions.length - 2} more suggestions...`
+              }
+            </button>
+          </li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 interface FeedbackDisplayPanelProps {
   feedback: FeedbackSchema;
   onStartNewSession: () => void;
@@ -82,39 +152,7 @@ export function FeedbackDisplayPanel({
 
           {/* Areas for Improvement - Compact View */}
           {feedback.Areas_For_Improvement && feedback.Areas_For_Improvement.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="font-medium text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                <Target className="h-3 w-3" />
-                Areas for Improvement
-              </h4>
-              {(() => {
-                const [showAllImprovements, setShowAllImprovements] = React.useState(false);
-                
-                return (
-              <ul className="space-y-1">
-                    {(showAllImprovements ? feedback.Areas_For_Improvement : feedback.Areas_For_Improvement.slice(0, 2)).map((area, index) => (
-                  <li key={index} className="flex items-start gap-2 text-xs">
-                    <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                    <span className="text-muted-foreground">{area}</span>
-                  </li>
-                ))}
-                {feedback.Areas_For_Improvement.length > 2 && (
-                      <li className="text-xs ml-5">
-                        <button
-                          onClick={() => setShowAllImprovements(!showAllImprovements)}
-                          className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-                        >
-                          {showAllImprovements 
-                            ? "Show fewer areas..." 
-                            : `+${feedback.Areas_For_Improvement.length - 2} more areas...`
-                          }
-                        </button>
-                      </li>
-          )}
-                  </ul>
-                );
-              })()}
-            </div>
+            <AreasForImprovementSection areas={feedback.Areas_For_Improvement} />
           )}
 
           {/* Critical Messages - Compact View */}
@@ -132,39 +170,7 @@ export function FeedbackDisplayPanel({
 
           {/* General Suggestions - Compact View */}
           {feedback.General_Suggestions && feedback.General_Suggestions.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="font-medium text-xs flex items-center gap-1">
-                <Lightbulb className="h-3 w-3" />
-                Suggestions
-              </h4>
-              {(() => {
-                const [showAllSuggestions, setShowAllSuggestions] = React.useState(false);
-                
-                return (
-              <ul className="space-y-1">
-                    {(showAllSuggestions ? feedback.General_Suggestions : feedback.General_Suggestions.slice(0, 2)).map((suggestion, index) => (
-                  <li key={index} className="flex items-start gap-2 text-xs">
-                    <Lightbulb className="h-3 w-3 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                    <span className="text-muted-foreground">{suggestion}</span>
-                  </li>
-                ))}
-                {feedback.General_Suggestions.length > 2 && (
-                      <li className="text-xs ml-5">
-                        <button
-                          onClick={() => setShowAllSuggestions(!showAllSuggestions)}
-                          className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-                        >
-                          {showAllSuggestions 
-                            ? "Show fewer suggestions..." 
-                            : `+${feedback.General_Suggestions.length - 2} more suggestions...`
-                          }
-                        </button>
-                      </li>
-          )}
-                  </ul>
-                );
-              })()}
-            </div>
+            <GeneralSuggestionsSection suggestions={feedback.General_Suggestions} />
           )}
           <Separator className="my-3" />
 

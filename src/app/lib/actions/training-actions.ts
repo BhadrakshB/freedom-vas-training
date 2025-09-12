@@ -1,6 +1,6 @@
 'use server'
 
-import { AIMessage, BaseMessage, MessageContent } from "@langchain/core/messages";
+import { BaseMessage, MessageContent } from "@langchain/core/messages";
 import { TrainingError, ERROR_MESSAGES } from "../error-handling";
 import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow, TrainingStateType, FeedbackSchema } from "@/lib/agents/v2/graph_v2"
 
@@ -163,31 +163,7 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
   }
 }
 
-interface EndTrainingRequest {
-  sessionId: string;
-  userId: string;
-  reason?: 'completed' | 'user_ended' | 'timeout';
-}
 
-interface EndTrainingResponse {
-  finalScore: number;
-  detailedFeedback: {
-    overallPerformance: string;
-    strengths: string[];
-    improvementAreas: string[];
-    sopReferences: string[];
-    recommendations: string[];
-  };
-  sessionSummary: {
-    duration: number;
-    messageCount: number;
-    objectivesAchieved: number;
-    totalObjectives: number;
-  };
-  error?: string;
-  errorType?: string;
-  errorCode?: string;
-}
 
 // export async function endTrainingSession(request: EndTrainingRequest): Promise<EndTrainingResponse> {
 //   try {
@@ -283,6 +259,91 @@ interface EndTrainingResponse {
 //     };
 //   }
 // }
+
+interface EndTrainingRequest {
+  scenario: ScenarioGeneratorSchema;
+  guestPersona: PersonaGeneratorSchema;
+  messages: BaseMessage[];
+}
+
+interface EndTrainingResponse {
+  feedback?: FeedbackSchema;
+  status: TrainingStateType;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function endTrainingSession(request: EndTrainingRequest): Promise<EndTrainingResponse> {
+  try {
+    // Validate required fields
+    if (!request.scenario || typeof request.scenario !== "object") {
+      throw new TrainingError(
+        "Scenario is required to end training session",
+        'validation',
+        'medium',
+        'MISSING_SCENARIO'
+      );
+    }
+
+    if (!request.guestPersona || typeof request.guestPersona !== "object") {
+      throw new TrainingError(
+        "Guest persona is required to end training session",
+        'validation',
+        'medium',
+        'MISSING_PERSONA'
+      );
+    }
+
+    if (!request.messages || !Array.isArray(request.messages)) {
+      throw new TrainingError(
+        "Conversation history is required to end training session",
+        'validation',
+        'medium',
+        'MISSING_CONVERSATION_HISTORY'
+      );
+    }
+
+    console.log(`Ending training session with ${request.messages.length} messages`);
+
+    // Invoke workflow with completed status to trigger feedback generation
+    const data = await workflow.invoke({
+      conversationHistory: request.messages,
+      persona: request.guestPersona,
+      scenario: request.scenario,
+      status: "completed", // Force completion to trigger feedback
+    });
+
+    console.log("=== END TRAINING WORKFLOW STATE RETURNED ===");
+    console.log("Full State:", JSON.stringify(data, null, 2));
+    console.log("Status:", data?.status);
+    console.log("Feedback:", data?.feedback ? "Present" : "Not present");
+    console.log("===============================");
+
+    return {
+      feedback: data?.feedback,
+      status: data?.status || 'completed',
+    };
+
+  } catch (error) {
+    console.error("End training session error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        status: 'error',
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      status: 'error',
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}
 
 interface RefineScenarioRequest {
   scenario: string;

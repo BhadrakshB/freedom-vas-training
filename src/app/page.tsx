@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useContext } from "react";
+import React, { useCallback, useRef, useContext, useState } from "react";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { MessageArea } from "./components/MessageArea";
 import { MessageInput } from "./components/MessageInput";
@@ -19,13 +19,12 @@ import {
   updateTrainingSession,
   refineScenario,
   refinePersona,
+  endTrainingSession,
 } from "./lib/actions/training-actions";
-import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import {
   ScenarioGeneratorSchema,
   PersonaGeneratorSchema,
-  TrainingStateType,
-  FeedbackSchema,
 } from "./lib/agents/v2/graph_v2";
 import { TrainingError, ErrorType, classifyError } from "./lib/error-handling";
 import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
@@ -124,6 +123,7 @@ function ChatPage() {
   const isSessionCompleted = trainingStatus === "completed";
   const isSessionError = trainingStatus === "error";
   const isTrainingActive = trainingStarted && trainingStatus === "ongoing";
+  const [isEndingTraining, setIsEndingTraining] = useState(false);
 
   // Resize handlers
   const handleMouseDown = useCallback(
@@ -326,6 +326,55 @@ function ChatPage() {
       setMessages([...messages, chatErrorMessage]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEndTraining = async () => {
+    if (!trainingStarted || !scenario || !persona) {
+      return;
+    }
+
+    setIsEndingTraining(true);
+
+    try {
+      const result = await endTrainingSession({
+        scenario,
+        guestPersona: persona,
+        messages,
+      });
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Update training status and feedback
+      setTrainingStatus("completed");
+      if (result.feedback) {
+        setSessionFeedback(result.feedback);
+      }
+
+    } catch (error) {
+      console.error("Error ending training session:", error);
+      setTrainingStatus("error");
+
+      // Classify and store error information
+      const errorTypeClassified = classifyError(error);
+
+      if (error instanceof TrainingError) {
+        setError(error.message, errorTypeClassified);
+      } else if (error instanceof Error) {
+        setError(
+          getErrorMessage(errorTypeClassified, error.message),
+          errorTypeClassified
+        );
+      } else {
+        setError(
+          "Failed to end training session. Please try again.",
+          errorTypeClassified
+        );
+      }
+    } finally {
+      setIsEndingTraining(false);
     }
   };
 
@@ -593,7 +642,11 @@ function ChatPage() {
               {/* Training Status Indicator for ongoing training */}
               {isTrainingActive && (
                 <div className="flex justify-center p-2 border-b bg-background/95">
-                  <TrainingStatusIndicator status={trainingStatus} />
+                  <TrainingStatusIndicator 
+                    status={trainingStatus} 
+                    onEndTraining={handleEndTraining}
+                    isEndingTraining={isEndingTraining}
+                  />
                 </div>
               )}
 
