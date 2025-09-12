@@ -291,7 +291,7 @@ function ChatPage() {
         `${(result.guestResponse as string) || "No response received."}`
       );
 
-      setMessages([...messages, guestMessage]);
+      setMessages([...messages, newMessage, guestMessage]);
     } catch (error) {
       console.error("Error updating training session:", error);
       setTrainingStatus("error");

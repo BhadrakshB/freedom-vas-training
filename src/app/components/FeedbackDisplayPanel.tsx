@@ -87,19 +87,33 @@ export function FeedbackDisplayPanel({
                 <Target className="h-3 w-3" />
                 Areas for Improvement
               </h4>
+              {(() => {
+                const [showAllImprovements, setShowAllImprovements] = React.useState(false);
+                
+                return (
               <ul className="space-y-1">
-                {feedback.Areas_For_Improvement.map((area, index) => (
+                    {(showAllImprovements ? feedback.Areas_For_Improvement : feedback.Areas_For_Improvement.slice(0, 2)).map((area, index) => (
                   <li key={index} className="flex items-start gap-2 text-xs">
                     <AlertCircle className="h-3 w-3 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                     <span className="text-muted-foreground">{area}</span>
                   </li>
                 ))}
-                {/* {feedback.Areas_For_Improvement.length > 3 && (
-                  <li className="text-xs text-muted-foreground/70 ml-5">
-                    +{feedback.Areas_For_Improvement.length - 3} more areas...
-                  </li>
-                )} */}
-              </ul>
+                {feedback.Areas_For_Improvement.length > 2 && (
+                      <li className="text-xs ml-5">
+                        <button
+                          onClick={() => setShowAllImprovements(!showAllImprovements)}
+                          className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                        >
+                          {showAllImprovements 
+                            ? "Show fewer areas..." 
+                            : `+${feedback.Areas_For_Improvement.length - 2} more areas...`
+                          }
+                        </button>
+                      </li>
+          )}
+                  </ul>
+                );
+              })()}
             </div>
           )}
 
@@ -123,22 +137,35 @@ export function FeedbackDisplayPanel({
                 <Lightbulb className="h-3 w-3" />
                 Suggestions
               </h4>
+              {(() => {
+                const [showAllSuggestions, setShowAllSuggestions] = React.useState(false);
+                
+                return (
               <ul className="space-y-1">
-                {feedback.General_Suggestions.slice(0, 2).map((suggestion, index) => (
+                    {(showAllSuggestions ? feedback.General_Suggestions : feedback.General_Suggestions.slice(0, 2)).map((suggestion, index) => (
                   <li key={index} className="flex items-start gap-2 text-xs">
                     <Lightbulb className="h-3 w-3 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                     <span className="text-muted-foreground">{suggestion}</span>
                   </li>
                 ))}
                 {feedback.General_Suggestions.length > 2 && (
-                  <li className="text-xs text-muted-foreground/70 ml-5">
-                    +{feedback.General_Suggestions.length - 2} more suggestions...
-                  </li>
-                )}
-              </ul>
+                      <li className="text-xs ml-5">
+                        <button
+                          onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+                          className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+                        >
+                          {showAllSuggestions 
+                            ? "Show fewer suggestions..." 
+                            : `+${feedback.General_Suggestions.length - 2} more suggestions...`
+                          }
+                        </button>
+                      </li>
+          )}
+                  </ul>
+                );
+              })()}
             </div>
           )}
-
           <Separator className="my-3" />
 
           {/* CTA Section */}
