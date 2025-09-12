@@ -71,13 +71,13 @@ export const TrainingState = Annotation.Root({
   }),
   scenario: Annotation<ScenarioGeneratorSchema>(
     {
-    reducer: (a,b) => a,
-  }
+      reducer: (a, b) => a,
+    }
   ),
   persona: Annotation<PersonaGeneratorSchema>(
     {
-    reducer: (a,b) => a,
-  }
+      reducer: (a, b) => a,
+    }
   ),
   status: Annotation<TrainingStateType>(),
   feedback: Annotation<FeedbackSchema>(),
@@ -124,7 +124,7 @@ const makeAgentNode = <T>({
       if (response?.Resolution_Accepted === true) {
 
         console.log("✅ Training marked successful because resolution was accepted.");
-        return  {
+        return {
           ...updatedState,
 
           status: 'completed', // mark training as successful
@@ -132,7 +132,7 @@ const makeAgentNode = <T>({
       }
     }
 
-    return {...updatedState};
+    return { ...updatedState };
   };
 };
 
@@ -169,7 +169,7 @@ const customerSimulator = makeAgentNode<CustomerSimulatorSchema>({
   responseSchema: customerSimulatorSchema,
   model: customerLLM,
   systemPrompt: customerSimulatorPromptXML, // System prompt omitted for brevity.
-  returnFunction: function (state: typeof TrainingState.State, response: CustomerSimulatorSchema) {    
+  returnFunction: function (state: typeof TrainingState.State, response: CustomerSimulatorSchema) {
     return {
       ...state,
       conversationHistory: [...state.conversationHistory,
@@ -185,14 +185,14 @@ const feedbackAgent = makeAgentNode<FeedbackSchema>({
   model: feedbackLLM, // Choose a more reflective/analytical model if available
   systemPrompt: feedbackGeneratorPromptXML,
   returnFunction: function (state: typeof TrainingState.State, response: FeedbackSchema) {
-    
+
     const updatedState = {
       ...state,
       feedback: response
     };
 
     console.log(`FEEDBACK AGENT UPDATED STATE: ${updatedState}`)
-    
+
     return updatedState;
   }
 });
@@ -208,7 +208,7 @@ const checkStateInitial = (state: StateType<typeof TrainingState.spec>) => {
   } if (state.scenario && !state.persona) return "persona_generator";
   if (!state.scenario && state.persona) return "scenario_generator";
 
-  
+
   else {
     console.log("Scenario and Persona do not exist. Starting generation.");
     return "scenario_generator";
@@ -217,21 +217,21 @@ const checkStateInitial = (state: StateType<typeof TrainingState.spec>) => {
 
 // --- Graph Workflow Definition ---
 export const workflow = new StateGraph(TrainingState)
-  .addNode("scenario_generator", scenarioGenerator) 
-  .addNode("persona_generator", personaGenerator) 
-  .addNode("customer_simulator", customerSimulator) 
-  .addNode("feedback_generator", feedbackAgent) 
-  .addConditionalEdges( 
-    START, 
-    checkStateInitial, 
-    { 
-      "customer_simulator": "customer_simulator", 
-      "scenario_generator": "scenario_generator" ,
+  .addNode("scenario_generator", scenarioGenerator)
+  .addNode("persona_generator", personaGenerator)
+  .addNode("customer_simulator", customerSimulator)
+  .addNode("feedback_generator", feedbackAgent)
+  .addConditionalEdges(
+    START,
+    checkStateInitial,
+    {
+      "customer_simulator": "customer_simulator",
+      "scenario_generator": "scenario_generator",
       "persona_generator": "persona_generator",
       "feedback_generator": "feedback_generator",
     }
-  ) 
-.addConditionalEdges(
+  )
+  .addConditionalEdges(
     "scenario_generator",
     (state: StateType<typeof TrainingState.spec>) => {
       if (!state.persona) return "persona_generator";
@@ -243,20 +243,20 @@ export const workflow = new StateGraph(TrainingState)
     }
   )
 
-  .addConditionalEdges( 
-    "customer_simulator", 
+  .addConditionalEdges(
+    "customer_simulator",
     (state: StateType<typeof TrainingState.spec>) => {
       console.log("LINE 236  Customer Simulator State Status:", state.status);
-      if (state.status !== "completed" || state.status == undefined) { return "end"; } 
+      if (state.status !== "completed" || state.status == undefined) { return "end"; }
       else { return "feedback_generator"; }
     },
     {
       'end': END,
-      'feedback_generator' : 'feedback_generator'
+      'feedback_generator': 'feedback_generator'
     }
-  ) 
-  .addEdge("persona_generator", "customer_simulator") 
-  .addEdge("feedback_generator", END) 
+  )
+  .addEdge("persona_generator", "customer_simulator")
+  .addEdge("feedback_generator", END)
   .compile();
 
 
@@ -409,8 +409,8 @@ export const scenarioPersonaRefineWorkflow = new StateGraph(ScenarioState)
       persona_refiner: "persona_refiner",
       END: END,
     }
-  )  
+  )
   .addEdge("scenario_refiner", END)
   .addEdge("persona_refiner", END)
-  .addEdge(START, END)  
+  .addEdge(START, END)
   .compile();
