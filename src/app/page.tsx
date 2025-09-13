@@ -2,6 +2,7 @@
 
 import React, { useCallback, useRef, useContext, useState } from "react";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { AuthStatus } from "./components/AuthStatus";
 import { MessageArea } from "./components/MessageArea";
 import { MessageInput } from "./components/MessageInput";
 import { Button } from "./components/ui/button";
@@ -13,6 +14,7 @@ import {
   CompletionFooter,
   FeedbackDisplayPanel,
   TrainingStatusIndicator,
+  ProtectedRoute,
 } from "./components";
 import {
   startTrainingSession,
@@ -582,7 +584,9 @@ function ChatPage() {
         <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground truncate pr-2">
           STR Virtual Assistant Training
         </h1>
-        <ThemeToggle className="shrink-0" />
+        <div className="flex items-center gap-2 shrink-0">
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* Error Display */}
@@ -730,6 +734,12 @@ function ChatPage() {
                   disabled={isLoading}
                   defaultOpen={false}
                 />
+
+                {/* Auth Status Panel */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">Authentication Status</h3>
+                  <AuthStatus />
+                </div>
               </>
             ) : (
               <>
@@ -762,10 +772,13 @@ function ChatPage() {
   );
 }
 
+
 export default function RootLayout() {
   return (
     <TrainingProvider>
-      <ChatPage></ChatPage>
+      <div className="min-h-screen">
+          <ChatPage />
+      </div>
     </TrainingProvider>
   );
 }

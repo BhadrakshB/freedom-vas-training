@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react'
 import { useAuthState } from 'react-firebase-hooks/auth'
 
 // Mock Firebase auth
-vi.mock('@/app/firebase/config', () => ({
+vi.mock('@/app/adapters/firebase/firebase.client', () => ({
   auth: {
     currentUser: null,
     onAuthStateChanged: vi.fn()

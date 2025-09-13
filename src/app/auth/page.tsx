@@ -8,7 +8,7 @@ import {
   useCreateUserWithEmailAndPassword,
   useSignInWithGoogle,
 } from "react-firebase-hooks/auth";
-import { auth } from "@/app/firebase/config";
+import { auth } from "@/app/adapters/firebase/firebase.client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui";
 import { Input } from "@/app/components/ui/input";
 import { Button } from "@/app/components/ui/button";

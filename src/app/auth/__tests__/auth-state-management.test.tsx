@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 // Mock Firebase auth
-vi.mock('@/app/firebase/config', () => ({
+vi.mock('@/app/adapters/firebase/firebase.client', () => ({
   auth: {
     currentUser: null,
     onAuthStateChanged: vi.fn()

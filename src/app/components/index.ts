@@ -3,6 +3,10 @@
 // Theme Components
 export { ThemeToggle } from './ThemeToggle';
 
+// Auth Components
+export { AuthStatus } from './AuthStatus';
+export { ProtectedRoute } from './ProtectedRoute';
+
 // Chat Interface Components
 export { MessageArea, } from './MessageArea';
 export { MessageInput } from './MessageInput';
