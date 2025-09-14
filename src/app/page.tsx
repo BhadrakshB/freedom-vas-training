@@ -2,7 +2,7 @@
 
 import React, { useCallback, useRef, useContext, useState } from "react";
 import { ThemeToggle } from "./components/ThemeToggle";
-import { AuthStatus } from "./components/AuthStatus";
+
 import { MessageArea } from "./components/MessageArea";
 import { MessageInput } from "./components/MessageInput";
 import { Button } from "./components/ui/button";
@@ -14,7 +14,6 @@ import {
   CompletionFooter,
   FeedbackDisplayPanel,
   TrainingStatusIndicator,
-  ProtectedRoute,
 } from "./components";
 import { LeftSidebar } from "./components/LeftSidebar";
 import {
@@ -34,8 +33,13 @@ import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
 import { useAuth } from "./contexts/AuthContext";
 import { CoreAppDataContext } from "./contexts/CoreAppDataContext";
 import { getOrCreateUserByFirebaseUid } from "./lib/db/actions/user-actions";
-import { createThread, updateThread, completeTrainingSession } from "./lib/db/actions/thread-actions";
+import {
+  createThread,
+  completeTrainingSession,
+} from "./lib/db/actions/thread-actions";
 import { createMessage } from "./lib/db/actions/message-actions";
+import { getMessagesByChatId } from "./lib/actions/message-actions";
+import type { UserThread } from "./lib/actions/user-threads-actions";
 
 // Helper functions for error handling
 function isRetryableError(errorType: ErrorType): boolean {
@@ -130,7 +134,7 @@ function ChatPage() {
   // Get auth context for user information
   const authContext = useAuth();
   const authUser = authContext?.state?.user;
-  
+
   // Get core app data context for thread management
   const coreContext = useContext(CoreAppDataContext);
   const coreDispatch = coreContext?.dispatch;
@@ -250,7 +254,7 @@ function ChatPage() {
               score: null,
               feedback: null,
               completedAt: null,
-              deletedAt: null
+              deletedAt: null,
             });
 
             if (newThread) {
@@ -263,17 +267,17 @@ function ChatPage() {
                 role: "AI",
                 parts: [{ text: initialMessage.content as string }],
                 attachments: [],
-                isTraining: true
+                isTraining: true,
               });
 
               // Update CoreAppDataContext with new thread
               const userThread = {
                 ...newThread,
                 isActive: true,
-                lastActivity: new Date()
+                lastActivity: new Date(),
               };
               if (coreDispatch) {
-                coreDispatch({ type: 'ADD_USER_THREAD', payload: userThread });
+                coreDispatch({ type: "ADD_USER_THREAD", payload: userThread });
               }
             }
           }
@@ -377,16 +381,16 @@ function ChatPage() {
             role: "trainee",
             parts: [{ text: content }],
             attachments: [],
-            isTraining: true
+            isTraining: true,
           });
 
           // Save AI response
           await createMessage({
             chatId: currentThreadId,
             role: "AI",
-            parts: [{ text: result.guestResponse as string || "" }],
+            parts: [{ text: (result.guestResponse as string) || "" }],
             attachments: [],
-            isTraining: true
+            isTraining: true,
           });
 
           // Update thread's updatedAt timestamp is handled internally by updateThread
@@ -394,11 +398,11 @@ function ChatPage() {
           // Update thread in CoreAppDataContext
           if (coreDispatch) {
             coreDispatch({
-              type: 'UPDATE_USER_THREAD',
+              type: "UPDATE_USER_THREAD",
               payload: {
                 id: currentThreadId,
-                updates: { updatedAt: new Date() }
-              }
+                updates: { updatedAt: new Date() },
+              },
             });
           }
         } catch (dbError) {
@@ -470,34 +474,36 @@ function ChatPage() {
       // Update database thread if exists
       if (currentThreadId && authUser?.uid) {
         try {
-            const completedThread = await completeTrainingSession(
-              currentThreadId,
-              null, // scores will be stored as part of feedback JSON
-              result.feedback || null
-            );
+          const completedThread = await completeTrainingSession(
+            currentThreadId,
+            null, // scores will be stored as part of feedback JSON
+            result.feedback || null
+          );
 
           if (completedThread) {
             // Update thread in CoreAppDataContext
             if (coreDispatch) {
               coreDispatch({
-                type: 'UPDATE_USER_THREAD',
+                type: "UPDATE_USER_THREAD",
                 payload: {
                   id: currentThreadId,
                   updates: {
-                    status: 'completed',
+                    status: "completed",
                     completedAt: new Date(),
                     score: null,
-                    feedback: result.feedback || null
-                  }
-                }
+                    feedback: result.feedback || null,
+                  },
+                },
               });
             }
           }
         } catch (dbError) {
-          console.error("Error updating thread completion in database:", dbError);
+          console.error(
+            "Error updating thread completion in database:",
+            dbError
+          );
         }
       }
-
     } catch (error) {
       console.error("Error ending training session:", error);
       setTrainingStatus("error");
@@ -529,6 +535,85 @@ function ChatPage() {
 
     // Automatically start a new training session
     await handleStartTraining();
+  };
+
+  const handleThreadSelect = async (thread: UserThread) => {
+    try {
+      setIsLoading(true);
+
+      // Reset current session state
+      resetSession();
+
+      // Load messages from the selected thread
+      const messagesResult = await getMessagesByChatId(thread.id);
+
+      if (messagesResult.success && messagesResult.messages) {
+        // Convert database messages to LangChain message format
+        const langchainMessages = messagesResult.messages.map((dbMessage) => {
+          let content = "";
+
+          // Handle different parts structures
+          if (Array.isArray(dbMessage.parts) && dbMessage.parts.length > 0) {
+            content = dbMessage.parts
+              .map((part: any) => part?.text || "")
+              .join("\n");
+          } else if (typeof dbMessage.parts === "string") {
+            content = dbMessage.parts;
+          } else if (
+            dbMessage.parts &&
+            typeof dbMessage.parts === "object" &&
+            "text" in dbMessage.parts
+          ) {
+            content = (dbMessage.parts as any).text || "";
+          }
+
+          if (dbMessage.role === "AI") {
+            return new AIMessage(content);
+          } else {
+            return new HumanMessage(content);
+          }
+        });
+
+        // Set the loaded messages
+        setMessages(langchainMessages);
+
+        // Set thread context
+        setCurrentThreadId(thread.id);
+
+        // Set scenario and persona if available
+        if (thread.scenario) {
+          setScenario(thread.scenario as any);
+        }
+        if (thread.persona) {
+          setPersona(thread.persona as any);
+        }
+
+        // Set training state based on thread status
+        setTrainingStarted(true);
+
+        if (thread.status === "completed") {
+          setTrainingStatus("completed");
+          if (thread.feedback) {
+            setSessionFeedback(thread.feedback as any);
+          }
+        } else if (thread.status === "active") {
+          setTrainingStatus("ongoing");
+        } else {
+          setTrainingStatus("paused");
+        }
+      } else {
+        console.error("Failed to load thread messages:", messagesResult.error);
+        setError(
+          "Failed to load thread messages. Please try again.",
+          "unknown"
+        );
+      }
+    } catch (error) {
+      console.error("Error loading thread:", error);
+      setError("Failed to load training session. Please try again.", "unknown");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleRetry = async () => {
@@ -704,7 +789,7 @@ function ChatPage() {
     }
 
     if (refinedPersona.personality_traits) {
-      formatted += `Personality Traits: ${refinedPersona.personality_traits}\nn`;
+      formatted += `Personality Traits: ${refinedPersona.personality_traits}\n\n`;
     }
     if (refinedPersona.emotional_tone) {
       formatted += `Emotional Tone: ${refinedPersona.emotional_tone}\n\n`;
@@ -719,208 +804,207 @@ function ChatPage() {
   return (
     <div className="h-screen flex bg-background">
       {/* Left Sidebar */}
-      <LeftSidebar />
-      
+      <LeftSidebar onThreadSelect={handleThreadSelect} />
+
       {/* Main Content */}
       <div
         className={`flex-1 flex flex-col bg-background relative ${
           isResizing ? "select-none" : ""
         }`}
       >
-      {/* Header Section */}
-      <header className="flex items-center justify-between p-3 sm:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground truncate pr-2">
-          STR Virtual Assistant Training
-        </h1>
-        <div className="flex items-center gap-2 shrink-0">
-          <ThemeToggle />
-        </div>
-      </header>
+        {/* Header Section */}
+        <header className="flex items-center justify-between p-3 sm:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground truncate pr-2">
+            STR Virtual Assistant Training
+          </h1>
+          <div className="flex items-center gap-2 shrink-0">
+            <ThemeToggle />
+          </div>
+        </header>
 
-      {/* Error Display */}
-      {errorMessage && errorType && (
-        <div className="px-3 sm:px-4 py-2 bg-red-50 dark:bg-red-950/20 border-b border-red-200 dark:border-red-800">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-red-600 dark:text-red-400 font-medium">
-              {errorType === "network" && "🌐"}
-              {errorType === "timeout" && "⏱️"}
-              {errorType === "validation" && "⚠️"}
-              {errorType === "agent" && "🤖"}
-              {errorType === "session" && "📋"}
-              {errorType === "unknown" && "❌"}{" "}
-              {errorType.charAt(0).toUpperCase() + errorType.slice(1)} Error
-            </span>
-            <span className="text-red-700 dark:text-red-300">
-              {errorMessage}
-            </span>
-            {isRetryableError(errorType) && (
-              <span className="text-red-600 dark:text-red-400 text-xs ml-auto">
-                Retryable
+        {/* Error Display */}
+        {errorMessage && errorType && (
+          <div className="px-3 sm:px-4 py-2 bg-red-50 dark:bg-red-950/20 border-b border-red-200 dark:border-red-800">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-red-600 dark:text-red-400 font-medium">
+                {errorType === "network" && "🌐"}
+                {errorType === "timeout" && "⏱️"}
+                {errorType === "validation" && "⚠️"}
+                {errorType === "agent" && "🤖"}
+                {errorType === "session" && "📋"}
+                {errorType === "unknown" && "❌"}{" "}
+                {errorType.charAt(0).toUpperCase() + errorType.slice(1)} Error
               </span>
+              <span className="text-red-700 dark:text-red-300">
+                {errorMessage}
+              </span>
+              {isRetryableError(errorType) && (
+                <span className="text-red-600 dark:text-red-400 text-xs ml-auto">
+                  Retryable
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-hidden flex">
+          {/* Left Side - Chat Area */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {!trainingStarted ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <h2 className="text-xl font-semibold text-foreground">
+                    Ready to Start Training?
+                  </h2>
+                  <p className="text-muted-foreground max-w-md">
+                    Customize your training using the panels on the right, or
+                    leave them blank for AI-generated content.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      handleStartTraining();
+                    }}
+                    disabled={isLoading}
+                    size="lg"
+                  >
+                    {isLoading
+                      ? "Starting Training..."
+                      : "Start Training Session"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full flex flex-col">
+                {/* Training Status Indicator for ongoing training */}
+                {isTrainingActive && (
+                  <div className="flex justify-center p-2 border-b bg-background/95">
+                    <TrainingStatusIndicator
+                      status={trainingStatus}
+                      onEndTraining={handleEndTraining}
+                      isEndingTraining={isEndingTraining}
+                    />
+                  </div>
+                )}
+
+                {/* Message Area */}
+                <div className="flex-1 overflow-hidden">
+                  <MessageArea messages={messages} className="h-full" />
+                </div>
+                {/* Footer - Message Input or Completion Footer */}
+                {trainingStarted && (
+                  <footer className="shrink-0">
+                    {isSessionCompleted || isSessionError ? (
+                      <CompletionFooter
+                        status={trainingStatus}
+                        onStartNewSession={handleStartNewSession}
+                        onRetry={isSessionError ? handleRetry : undefined}
+                      />
+                    ) : (
+                      <MessageInput
+                        onSendMessage={(message) => {
+                          handleSendMessage(message);
+                        }}
+                        placeholder="Type your message to the guest..."
+                        className="border-t-0"
+                        disabled={isLoading}
+                      />
+                    )}
+                  </footer>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden flex">
-        {/* Left Side - Chat Area */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {!trainingStarted ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center space-y-4">
-                <h2 className="text-xl font-semibold text-foreground">
-                  Ready to Start Training?
-                </h2>
-                <p className="text-muted-foreground max-w-md">
-                  Customize your training using the panels on the right, or
-                  leave them blank for AI-generated content.
-                </p>
-                <Button
-                  onClick={() => {
-                    handleStartTraining();
-                  }}
-                  disabled={isLoading}
-                  size="lg"
-                >
-                  {isLoading
-                    ? "Starting Training..."
-                    : "Start Training Session"}
-                </Button>
+          {/* Resize Handle */}
+          <div
+            className={`w-1 cursor-col-resize transition-all relative group ${
+              isResizing ? "bg-primary w-2" : "bg-border hover:bg-primary/50"
+            }`}
+            onMouseDown={handleMouseDown}
+            ref={resizeRef}
+          >
+            <div
+              className={`absolute inset-y-0 -left-2 -right-2 transition-colors ${
+                isResizing ? "bg-primary/30" : "group-hover:bg-primary/10"
+              }`}
+            />
+
+            {/* Visual grip dots */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex flex-col gap-1">
+                <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
+                <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
+                <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
               </div>
             </div>
-          ) : (
-            <div className="h-full flex flex-col">
-              {/* Training Status Indicator for ongoing training */}
-              {isTrainingActive && (
-                <div className="flex justify-center p-2 border-b bg-background/95">
-                  <TrainingStatusIndicator 
-                    status={trainingStatus} 
-                    onEndTraining={handleEndTraining}
-                    isEndingTraining={isEndingTraining}
-                  />
-                </div>
-              )}
+          </div>
 
-              {/* Message Area */}
-              <div className="flex-1 overflow-hidden">
-                <MessageArea messages={messages} className="h-full" />
-              </div>
-              {/* Footer - Message Input or Completion Footer */}
-              {trainingStarted && (
-                <footer className="shrink-0">
-                  {isSessionCompleted || isSessionError ? (
-                    <CompletionFooter
-                      status={trainingStatus}
+          {/* Right Side - Panels Section */}
+          <div
+            className="border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col"
+            style={{ width: `${panelWidth}px` }}
+          >
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {!trainingStarted ? (
+                <>
+                  {/* Custom Scenario Input Panel */}
+                  <CustomScenarioPanel
+                    value={customScenario}
+                    onChange={setCustomScenario}
+                    onRefine={handleRefineScenario}
+                    isRefining={isRefiningScenario}
+                    disabled={isLoading}
+                    defaultOpen={false}
+                  />
+
+                  {/* Custom Persona Input Panel */}
+                  <CustomPersonaPanel
+                    value={customPersona}
+                    onChange={setCustomPersona}
+                    onRefine={handleRefinePersona}
+                    isRefining={isRefiningPersona}
+                    disabled={isLoading}
+                    defaultOpen={false}
+                  />
+                </>
+              ) : (
+                <>
+                  {/* Feedback Display Panel - shown when session is completed */}
+                  {isSessionCompleted && sessionFeedback && (
+                    <FeedbackDisplayPanel
+                      feedback={sessionFeedback}
                       onStartNewSession={handleStartNewSession}
-                      onRetry={isSessionError ? handleRetry : undefined}
-                    />
-                  ) : (
-                    <MessageInput
-                      onSendMessage={(message) => {
-                        handleSendMessage(message);
-                      }}
-                      placeholder="Type your message to the guest..."
-                      className="border-t-0"
-                      disabled={isLoading}
+                      defaultOpen={true}
                     />
                   )}
-                </footer>
+                  {/* Generated Scenario Display Panel */}
+                  {scenario && (
+                    <ScenarioDisplayPanel
+                      scenario={scenario}
+                      defaultOpen={true}
+                    />
+                  )}
+
+                  {/* Generated Persona Display Panel */}
+                  {persona && (
+                    <PersonaDisplayPanel persona={persona} defaultOpen={true} />
+                  )}
+                </>
               )}
             </div>
-          )}
-        </div>
-
-        {/* Resize Handle */}
-        <div
-          className={`w-1 cursor-col-resize transition-all relative group ${
-            isResizing ? "bg-primary w-2" : "bg-border hover:bg-primary/50"
-          }`}
-          onMouseDown={handleMouseDown}
-          ref={resizeRef}
-        >
-          <div
-            className={`absolute inset-y-0 -left-2 -right-2 transition-colors ${
-              isResizing ? "bg-primary/30" : "group-hover:bg-primary/10"
-            }`}
-          />
-
-          {/* Visual grip dots */}
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="flex flex-col gap-1">
-              <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
-              <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
-              <div className="w-0.5 h-0.5 bg-muted-foreground rounded-full"></div>
-            </div>
           </div>
-        </div>
-
-        {/* Right Side - Panels Section */}
-        <div
-          className="border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col"
-          style={{ width: `${panelWidth}px` }}
-        >
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {!trainingStarted ? (
-              <>
-                {/* Custom Scenario Input Panel */}
-                <CustomScenarioPanel
-                  value={customScenario}
-                  onChange={setCustomScenario}
-                  onRefine={handleRefineScenario}
-                  isRefining={isRefiningScenario}
-                  disabled={isLoading}
-                  defaultOpen={false}
-                />
-
-                {/* Custom Persona Input Panel */}
-                <CustomPersonaPanel
-                  value={customPersona}
-                  onChange={setCustomPersona}
-                  onRefine={handleRefinePersona}
-                  isRefining={isRefiningPersona}
-                  disabled={isLoading}
-                  defaultOpen={false}
-                />
-              </>
-            ) : (
-              <>
-                {/* Feedback Display Panel - shown when session is completed */}
-                {isSessionCompleted && sessionFeedback && (
-                  <FeedbackDisplayPanel
-                    feedback={sessionFeedback}
-                    onStartNewSession={handleStartNewSession}
-                    defaultOpen={true}
-                  />
-                )}
-                {/* Generated Scenario Display Panel */}
-                {scenario && (
-                  <ScenarioDisplayPanel
-                    scenario={scenario}
-                    defaultOpen={true}
-                  />
-                )}
-
-                {/* Generated Persona Display Panel */}
-                {persona && (
-                  <PersonaDisplayPanel persona={persona} defaultOpen={true} />
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </main>
+        </main>
       </div>
     </div>
   );
 }
 
-
 export default function RootLayout() {
   return (
     <TrainingProvider>
       <div className="min-h-screen">
-          <ChatPage />
+        <ChatPage />
       </div>
     </TrainingProvider>
   );

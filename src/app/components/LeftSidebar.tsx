@@ -7,28 +7,31 @@ import { cn } from "../lib/utils";
 import { AuthStatus } from "./AuthStatus";
 import { UserThreadsList } from "./UserThreadsList";
 import { useAuth } from "../contexts/AuthContext";
+import type { UserThread } from "../lib/actions/user-threads-actions";
 
 interface LeftSidebarProps {
   children?: React.ReactNode;
   defaultCollapsed?: boolean;
   className?: string;
+  onThreadSelect?: (thread: UserThread) => void;
 }
 
-export function LeftSidebar({ 
-  children, 
-  defaultCollapsed = false, 
-  className 
+export function LeftSidebar({
+  children,
+  defaultCollapsed = false,
+  className,
+  onThreadSelect,
 }: LeftSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { state: authState } = useAuth();
 
   const toggleCollapsed = useCallback(() => {
-    setIsCollapsed(prev => !prev);
+    setIsCollapsed((prev) => !prev);
   }, []);
 
   const toggleMobile = useCallback(() => {
-    setIsMobileOpen(prev => !prev);
+    setIsMobileOpen((prev) => !prev);
   }, []);
 
   const closeMobile = useCallback(() => {
@@ -37,7 +40,7 @@ export function LeftSidebar({
 
   // Mobile overlay when open
   const mobileOverlay = isMobileOpen && (
-    <div 
+    <div
       className="fixed inset-0 bg-black/50 z-40 lg:hidden"
       onClick={closeMobile}
       aria-hidden="true"
@@ -53,7 +56,11 @@ export function LeftSidebar({
         className="lg:hidden fixed top-4 left-4 z-50 bg-background/80 backdrop-blur-sm"
         onClick={toggleMobile}
       >
-        {isMobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        {isMobileOpen ? (
+          <X className="h-4 w-4" />
+        ) : (
+          <Menu className="h-4 w-4" />
+        )}
       </Button>
 
       {/* Mobile overlay */}
@@ -67,22 +74,28 @@ export function LeftSidebar({
           "lg:relative lg:z-auto",
           isCollapsed ? "lg:w-16" : "lg:w-80",
           // Mobile behavior
-          isMobileOpen ? "w-80 translate-x-0" : "w-80 -translate-x-full lg:translate-x-0",
+          isMobileOpen
+            ? "w-80 translate-x-0"
+            : "w-80 -translate-x-full lg:translate-x-0",
           className
         )}
       >
         {/* Header with collapse/expand button */}
         <div className="flex items-center justify-between p-4 border-b">
-          <div className={cn(
-            "flex items-center gap-2 transition-opacity duration-200",
-            isCollapsed && "lg:opacity-0 lg:invisible"
-          )}>
+          <div
+            className={cn(
+              "flex items-center gap-2 transition-opacity duration-200",
+              isCollapsed && "lg:opacity-0 lg:invisible"
+            )}
+          >
             <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground text-sm font-bold">STR</span>
+              <span className="text-primary-foreground text-sm font-bold">
+                STR
+              </span>
             </div>
             <span className="font-semibold text-sm">Training Assistant</span>
           </div>
-          
+
           {/* Desktop collapse button */}
           <Button
             variant="ghost"
@@ -114,10 +127,12 @@ export function LeftSidebar({
           <div className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-6">
               {/* Authentication Status Section */}
-              <div className={cn(
-                "transition-opacity duration-200",
-                isCollapsed && "lg:opacity-0 lg:invisible"
-              )}>
+              <div
+                className={cn(
+                  "transition-opacity duration-200",
+                  isCollapsed && "lg:opacity-0 lg:invisible"
+                )}
+              >
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium text-muted-foreground">
                     Authentication
@@ -128,11 +143,13 @@ export function LeftSidebar({
 
               {/* User Threads Section - Only show when authenticated */}
               {authState.user && (
-                <div className={cn(
-                  "transition-opacity duration-200",
-                  isCollapsed && "lg:opacity-0 lg:invisible"
-                )}>
-                  <UserThreadsList />
+                <div
+                  className={cn(
+                    "transition-opacity duration-200",
+                    isCollapsed && "lg:opacity-0 lg:invisible"
+                  )}
+                >
+                  <UserThreadsList onThreadSelect={onThreadSelect} />
                 </div>
               )}
 
@@ -140,19 +157,21 @@ export function LeftSidebar({
               {isCollapsed && (
                 <div className="hidden lg:flex flex-col items-center space-y-4 pt-4">
                   {/* Auth status indicator */}
-                  <div 
+                  <div
                     className={cn(
                       "w-3 h-3 rounded-full border-2",
-                      authState.user 
-                        ? "bg-green-500 border-green-500" 
+                      authState.user
+                        ? "bg-green-500 border-green-500"
                         : "bg-gray-500 border-gray-500"
                     )}
-                    title={authState.user ? "Authenticated" : "Not authenticated"}
+                    title={
+                      authState.user ? "Authenticated" : "Not authenticated"
+                    }
                   />
-                  
+
                   {/* Threads count indicator */}
                   {authState.user && (
-                    <div 
+                    <div
                       className="w-8 h-6 bg-primary rounded text-primary-foreground text-xs flex items-center justify-center font-medium"
                       title="Training sessions"
                     >
@@ -168,10 +187,12 @@ export function LeftSidebar({
           </div>
 
           {/* Footer */}
-          <div className={cn(
-            "p-4 border-t transition-opacity duration-200",
-            isCollapsed && "lg:opacity-0 lg:invisible"
-          )}>
+          <div
+            className={cn(
+              "p-4 border-t transition-opacity duration-200",
+              isCollapsed && "lg:opacity-0 lg:invisible"
+            )}
+          >
             <div className="text-xs text-muted-foreground text-center">
               STR Training Assistant v1.0
             </div>
@@ -185,15 +206,15 @@ export function LeftSidebar({
 // Export hook for controlling sidebar from parent components
 export function useLeftSidebar() {
   const [isOpen, setIsOpen] = useState(false);
-  
+
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
-  const toggle = useCallback(() => setIsOpen(prev => !prev), []);
-  
+  const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
+
   return {
     isOpen,
     open,
     close,
-    toggle
+    toggle,
   };
 }
