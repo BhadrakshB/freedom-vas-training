@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   useAuthState,
@@ -19,7 +19,7 @@ interface AuthFormData {
   password: string;
 }
 
-export default function AuthPage() {
+function AuthPageContent() {
   // Firebase authentication hooks
   const [user, loading, error] = useAuthState(auth);
   const [signInWithEmailAndPassword, , signInLoading, signInError] =
@@ -573,5 +573,36 @@ export default function AuthPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Loading component for Suspense
+function AuthPageLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background p-3 sm:p-4">
+      <div className="w-full max-w-md">
+        <Card className="theme-transition">
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl sm:text-2xl font-bold">
+              Welcome to AI Training Simulator
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// Default export with Suspense boundary
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<AuthPageLoading />}>
+      <AuthPageContent />
+    </Suspense>
   );
 }
