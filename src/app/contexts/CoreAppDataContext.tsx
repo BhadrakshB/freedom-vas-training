@@ -309,6 +309,7 @@ function coreAppReducer(state: CoreAppState, action: CoreAppAction): CoreAppStat
 // Context interface
 interface CoreAppContextType {
   state: CoreAppState;
+  dispatch: React.Dispatch<CoreAppAction>;
   
   // User actions
   setUserProfile: (profile: UserProfile) => void;
@@ -346,7 +347,7 @@ interface CoreAppContextType {
 }
 
 // Create context
-const CoreAppDataContext = createContext<CoreAppContextType | undefined>(undefined);
+export const CoreAppDataContext = createContext<CoreAppContextType | undefined>(undefined);
 
 // Provider component
 export function CoreAppDataProvider({ children }: { children: React.ReactNode }) {
@@ -620,6 +621,7 @@ export function CoreAppDataProvider({ children }: { children: React.ReactNode })
 
   const contextValue: CoreAppContextType = {
     state,
+    dispatch,
     setUserProfile,
     updateUserPreferences,
     // User threads methods

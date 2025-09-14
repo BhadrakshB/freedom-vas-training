@@ -31,6 +31,11 @@ import {
 } from "./lib/agents/v2/graph_v2";
 import { TrainingError, ErrorType, classifyError } from "./lib/error-handling";
 import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
+import { useAuth } from "./contexts/AuthContext";
+import { CoreAppDataContext } from "./contexts/CoreAppDataContext";
+import { getOrCreateUserByFirebaseUid } from "./lib/db/actions/user-actions";
+import { createThread, updateThread, completeTrainingSession } from "./lib/db/actions/thread-actions";
+import { createMessage } from "./lib/db/actions/message-actions";
 
 // Helper functions for error handling
 function isRetryableError(errorType: ErrorType): boolean {
@@ -100,6 +105,7 @@ function ChatPage() {
     lastFailedMessage,
     panelWidth,
     isResizing,
+    currentThreadId,
     // Actions
     setMessages,
     setIsLoading,
@@ -117,8 +123,17 @@ function ChatPage() {
     setLastFailedMessage,
     setPanelWidth,
     setIsResizing,
+    setCurrentThreadId,
     resetSession,
   } = useContext(trainingContext);
+
+  // Get auth context for user information
+  const authContext = useAuth();
+  const authUser = authContext?.state?.user;
+  
+  // Get core app data context for thread management
+  const coreContext = useContext(CoreAppDataContext);
+  const coreDispatch = coreContext?.dispatch;
 
   const resizeRef = useRef<HTMLDivElement>(null);
 
@@ -211,6 +226,63 @@ function ChatPage() {
       );
 
       setMessages([initialMessage]);
+
+      // Create database thread for authenticated users
+      if (authUser?.uid) {
+        try {
+          // Get or create database user
+          const dbUserResult = await getOrCreateUserByFirebaseUid(
+            authUser.uid,
+            authUser.email
+          );
+
+          if (dbUserResult) {
+            // Create thread in database
+            const newThread = await createThread({
+              title: result.scenario?.scenario_title || "Training Session",
+              userId: dbUserResult.user.id,
+              visibility: "private",
+              scenario: result.scenario || {},
+              persona: result.guestPersona || {},
+              status: "active",
+              startedAt: new Date(),
+              version: "1",
+              score: null,
+              feedback: null,
+              completedAt: null,
+              deletedAt: null
+            });
+
+            if (newThread) {
+              // Store thread ID in context
+              setCurrentThreadId(newThread.id);
+
+              // Save initial AI message to database
+              await createMessage({
+                chatId: newThread.id,
+                role: "AI",
+                parts: [{ text: initialMessage.content as string }],
+                attachments: [],
+                isTraining: true
+              });
+
+              // Update CoreAppDataContext with new thread
+              const userThread = {
+                ...newThread,
+                isActive: true,
+                lastActivity: new Date()
+              };
+              if (coreDispatch) {
+                coreDispatch({ type: 'ADD_USER_THREAD', payload: userThread });
+              }
+            }
+          }
+        } catch (dbError) {
+          // Log database error but don't fail the training session
+          console.error("Error creating database thread:", dbError);
+          // Training can continue without database persistence
+        }
+      }
     } catch (error) {
       console.error("Error starting training session:", error);
       setTrainingStatus("error");
@@ -295,6 +367,45 @@ function ChatPage() {
       );
 
       setMessages([...messages, newMessage, guestMessage]);
+
+      // Save messages to database if thread exists
+      if (currentThreadId && authUser?.uid) {
+        try {
+          // Save human message
+          await createMessage({
+            chatId: currentThreadId,
+            role: "trainee",
+            parts: [{ text: content }],
+            attachments: [],
+            isTraining: true
+          });
+
+          // Save AI response
+          await createMessage({
+            chatId: currentThreadId,
+            role: "AI",
+            parts: [{ text: result.guestResponse as string || "" }],
+            attachments: [],
+            isTraining: true
+          });
+
+          // Update thread's updatedAt timestamp is handled internally by updateThread
+
+          // Update thread in CoreAppDataContext
+          if (coreDispatch) {
+            coreDispatch({
+              type: 'UPDATE_USER_THREAD',
+              payload: {
+                id: currentThreadId,
+                updates: { updatedAt: new Date() }
+              }
+            });
+          }
+        } catch (dbError) {
+          // Log database error but don't fail the message send
+          console.error("Error saving messages to database:", dbError);
+        }
+      }
     } catch (error) {
       console.error("Error updating training session:", error);
       setTrainingStatus("error");
@@ -354,6 +465,37 @@ function ChatPage() {
       setTrainingStatus("completed");
       if (result.feedback) {
         setSessionFeedback(result.feedback);
+      }
+
+      // Update database thread if exists
+      if (currentThreadId && authUser?.uid) {
+        try {
+            const completedThread = await completeTrainingSession(
+              currentThreadId,
+              null, // scores will be stored as part of feedback JSON
+              result.feedback || null
+            );
+
+          if (completedThread) {
+            // Update thread in CoreAppDataContext
+            if (coreDispatch) {
+              coreDispatch({
+                type: 'UPDATE_USER_THREAD',
+                payload: {
+                  id: currentThreadId,
+                  updates: {
+                    status: 'completed',
+                    completedAt: new Date(),
+                    score: null,
+                    feedback: result.feedback || null
+                  }
+                }
+              });
+            }
+          }
+        } catch (dbError) {
+          console.error("Error updating thread completion in database:", dbError);
+        }
       }
 
     } catch (error) {

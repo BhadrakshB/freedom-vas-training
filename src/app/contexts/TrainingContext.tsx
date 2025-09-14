@@ -25,6 +25,7 @@ export interface TrainingState {
   lastFailedMessage: string | null;
   panelWidth: number;
   isResizing: boolean;
+  currentThreadId: string | null;
 }
 
 export interface TrainingActions {
@@ -45,6 +46,7 @@ export interface TrainingActions {
   setLastFailedMessage: (message: string | null) => void;
   setPanelWidth: (width: number) => void;
   setIsResizing: (resizing: boolean) => void;
+  setCurrentThreadId: (threadId: string | null) => void;
   resetSession: () => void;
 }
 
@@ -68,6 +70,7 @@ export const trainingContext = createContext<TrainingContextType>({
   lastFailedMessage: null,
   panelWidth: 320,
   isResizing: false,
+  currentThreadId: null,
   // Actions
   setMessages: () => {},
   addMessage: () => {},
@@ -86,6 +89,7 @@ export const trainingContext = createContext<TrainingContextType>({
   setLastFailedMessage: () => {},
   setPanelWidth: () => {},
   setIsResizing: () => {},
+  setCurrentThreadId: () => {},
   resetSession: () => {},
 });
 
@@ -110,6 +114,7 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
 
   // Action functions
   const addMessage = (message: BaseMessage) => {
@@ -138,6 +143,7 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
     setTrainingStarted(false);
     setTrainingStatus("start");
     setLastFailedMessage(null);
+    setCurrentThreadId(null);
     clearError();
   };
 
@@ -159,6 +165,7 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
     lastFailedMessage,
     panelWidth,
     isResizing,
+    currentThreadId,
     // Actions
     setMessages,
     addMessage,
@@ -177,6 +184,7 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
     setLastFailedMessage,
     setPanelWidth,
     setIsResizing,
+    setCurrentThreadId,
     resetSession,
   };
 
