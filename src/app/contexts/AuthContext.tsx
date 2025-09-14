@@ -320,7 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authUser = convertFirebaseUser(firebaseUser || null);
     dispatch({ type: "SET_USER", payload: authUser });
 
-    // Set session expiry when user signs in
+    // Set session expiry when user signs in (only if no existing session)
     if (authUser && !state.sessionExpiry) {
       const expiry = new Date();
       expiry.setMinutes(expiry.getMinutes() + state.sessionTimeout);
@@ -331,8 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     firebaseUser,
     firebaseLoading,
     firebaseError,
-    state.sessionTimeout,
-    state.sessionExpiry,
+    // Remove state dependencies to prevent infinite re-renders
   ]);
 
   // Sign-in methods

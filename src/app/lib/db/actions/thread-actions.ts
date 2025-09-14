@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/lib/db';
+import { db } from '../index';
 import { thread } from '../schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import type { Thread } from '../schema';

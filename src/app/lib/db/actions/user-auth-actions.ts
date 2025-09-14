@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/lib/db';
+import { db } from '../index';
 import { userAuth } from '../schema';
 import { eq, and } from 'drizzle-orm';
 import type { UserAuth } from '../schema';

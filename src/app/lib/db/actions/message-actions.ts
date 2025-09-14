@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/lib/db';
+import { db } from '../index';
 import { message } from '../schema';
 import { eq, and, desc, asc } from 'drizzle-orm';
 import type { DBMessage } from '../schema';

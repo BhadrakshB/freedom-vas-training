@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/lib/db';
+import { db } from '../index';
 import { user } from '../schema';
 import { eq, isNull, desc } from 'drizzle-orm';
 import type { User } from '../schema';
