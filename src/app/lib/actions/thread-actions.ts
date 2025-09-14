@@ -5,7 +5,13 @@ import { thread, message } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-export async function createThread(userId: string, title: string, visibility: "public" | "private" = "private") {
+export async function createThread(
+  userId: string,
+  title: string,
+  visibility: "public" | "private" = "private",
+  scenario: any = {},
+  persona: any = {}
+) {
   try {
     const [newThread] = await db
       .insert(thread)
@@ -13,6 +19,9 @@ export async function createThread(userId: string, title: string, visibility: "p
         userId,
         title,
         visibility,
+        scenario,
+        persona,
+        startedAt: new Date(),
         createdAt: new Date(),
       })
       .returning();
@@ -75,10 +84,10 @@ export async function deleteThread(id: string) {
   try {
     // First delete all messages in the thread
     await db.delete(message).where(eq(message.chatId, id));
-    
+
     // Then delete the thread
     await db.delete(thread).where(eq(thread.id, id));
-    
+
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -105,10 +114,10 @@ export async function getThreadWithMessages(threadId: string) {
       .where(eq(message.chatId, threadId))
       .orderBy(message.createdAt);
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       thread: threadData,
-      messages 
+      messages
     };
   } catch (error) {
     console.error("Error fetching thread with messages:", error);

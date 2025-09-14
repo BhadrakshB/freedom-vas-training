@@ -2,7 +2,7 @@
 
 import { db } from "../db";
 import { message } from "../db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function createMessage(
@@ -22,7 +22,6 @@ export async function createMessage(
         parts,
         attachments,
         isTraining,
-        trainingId,
         createdAt: new Date(),
       })
       .returning();
@@ -65,7 +64,7 @@ export async function getMessagesByChatId(chatId: string) {
   }
 }
 
-export async function getTrainingMessages(chatId: string, trainingId: string) {
+export async function getTrainingMessages(chatId: string) {
   try {
     const messages = await db
       .select()
@@ -73,8 +72,7 @@ export async function getTrainingMessages(chatId: string, trainingId: string) {
       .where(
         and(
           eq(message.chatId, chatId),
-          eq(message.isTraining, true),
-          eq(message.trainingId, trainingId)
+          eq(message.isTraining, true)
         )
       )
       .orderBy(message.createdAt);
@@ -111,7 +109,6 @@ export async function updateMessage(id: string, updates: Partial<{
   parts: any;
   attachments: any;
   isTraining: boolean;
-  trainingId: string;
 }>) {
   try {
     const [updatedMessage] = await db
@@ -131,7 +128,7 @@ export async function updateMessage(id: string, updates: Partial<{
 export async function deleteMessage(id: string) {
   try {
     await db.delete(message).where(eq(message.id, id));
-    
+
     revalidatePath("/");
     return { success: true };
   } catch (error) {
@@ -143,7 +140,7 @@ export async function deleteMessage(id: string) {
 export async function deleteMessagesByChatId(chatId: string) {
   try {
     await db.delete(message).where(eq(message.chatId, chatId));
-    
+
     revalidatePath("/");
     return { success: true };
   } catch (error) {

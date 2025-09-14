@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, Clock, AlertCircle, Play, Square } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Play, Square, Pause } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TrainingStateType } from '../lib/agents/v2/graph_v2';
 import { Button } from './ui/button';
@@ -29,6 +29,12 @@ const statusConfig = {
     color: 'text-green-600 bg-green-50 border-green-200',
     label: 'Training Completed',
     ariaLabel: 'Training session completed successfully'
+  },
+  paused: {
+    icon: Pause,
+    color: 'text-yellow-600 bg-yellow-50 border-yellow-200',
+    label: 'Training Paused',
+    ariaLabel: 'Training session is paused'
   },
   error: {
     icon: AlertCircle,

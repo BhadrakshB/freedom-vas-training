@@ -1,17 +1,16 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { user } from "@/lib/db/schema";
+import { user, userAuth } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-export async function createUser(email: string, password?: string) {
+export async function createUser(userData: Partial<{ deletedAt: Date | null }> = {}) {
   try {
     const [newUser] = await db
       .insert(user)
       .values({
-        email,
-        password,
+        ...userData,
       })
       .returning();
 
@@ -40,12 +39,18 @@ export async function getUserById(id: string) {
 
 export async function getUserByEmail(email: string) {
   try {
-    const [foundUser] = await db
-      .select()
+    // Need to join with userAuth table to find user by email
+    const result = await db
+      .select({
+        user: user,
+        userAuth: userAuth
+      })
       .from(user)
-      .where(eq(user.email, email))
+      .innerJoin(userAuth, eq(user.id, userAuth.userId))
+      .where(eq(userAuth.email, email))
       .limit(1);
 
+    const foundUser = result[0]?.user;
     return { success: true, user: foundUser };
   } catch (error) {
     console.error("Error fetching user by email:", error);
@@ -53,7 +58,7 @@ export async function getUserByEmail(email: string) {
   }
 }
 
-export async function updateUser(id: string, updates: Partial<{ email: string; password: string }>) {
+export async function updateUser(id: string, updates: Partial<{ deletedAt: Date | null }>) {
   try {
     const [updatedUser] = await db
       .update(user)
@@ -72,7 +77,7 @@ export async function updateUser(id: string, updates: Partial<{ email: string; p
 export async function deleteUser(id: string) {
   try {
     await db.delete(user).where(eq(user.id, id));
-    
+
     revalidatePath("/");
     return { success: true };
   } catch (error) {

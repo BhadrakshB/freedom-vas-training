@@ -26,24 +26,24 @@ export function useAuthListener(options: UseAuthListenerOptions = {}) {
     if (!wasAuthenticated && isNowAuthenticated && currentUser) {
       console.log('User signed in:', currentUser.email);
       onSignIn?.(currentUser);
-      
+
       // Auto-store user profile if enabled
       if (storeProfile) {
-        storeUserProfile().catch(console.error);
+        storeUserProfile(currentUser).catch(console.error);
       }
     }
-    
+
     // User signed out
     if (wasAuthenticated && !isNowAuthenticated) {
       console.log('User signed out');
       onSignOut?.();
     }
-    
+
     // Any user change
     if (previousUser.current !== currentUser) {
       onUserChange?.(currentUser);
     }
-    
+
     // Update reference
     previousUser.current = currentUser;
   }, [state.user, onSignIn, onSignOut, onUserChange, storeProfile, storeUserProfile]);
