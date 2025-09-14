@@ -13,12 +13,14 @@ interface LeftSidebarProps {
   children?: React.ReactNode;
   className?: string;
   onThreadSelect?: (thread: UserThread) => void;
+  selectedThreadId?: string | null;
 }
 
 export function LeftSidebar({
   children,
   className,
   onThreadSelect,
+  selectedThreadId,
 }: LeftSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -148,7 +150,10 @@ export function LeftSidebar({
 
             {/* Threads Section */}
             {authState.user && (
-              <UserThreadsList onThreadSelect={onThreadSelect} />
+              <UserThreadsList 
+                onThreadSelect={onThreadSelect} 
+                selectedThreadId={selectedThreadId}
+              />
             )}
 
             {children}

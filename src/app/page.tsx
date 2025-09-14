@@ -804,7 +804,10 @@ function ChatPage() {
   return (
     <div className="h-screen flex bg-background">
       {/* Left Sidebar */}
-      <LeftSidebar onThreadSelect={handleThreadSelect} />
+      <LeftSidebar 
+        onThreadSelect={handleThreadSelect} 
+        selectedThreadId={currentThreadId}
+      />
 
       {/* Main Content */}
       <div

@@ -10,11 +10,13 @@ import { getUserThreadsByFirebaseUid, type UserThread } from "../lib/actions/use
 interface UserThreadsListProps {
   className?: string;
   onThreadSelect?: (thread: UserThread) => void;
+  selectedThreadId?: string | null;
 }
 
 export function UserThreadsList({ 
   className, 
-  onThreadSelect
+  onThreadSelect,
+  selectedThreadId
 }: UserThreadsListProps) {
   const { state: authState } = useAuth();
   
@@ -149,16 +151,26 @@ export function UserThreadsList({
                   thread.status === 'completed' ? 'bg-blue-500' :
                   'bg-gray-400';
                 
+                const isSelected = selectedThreadId === thread.id;
+                
                 return (
                   <button
                     key={thread.id}
                     onClick={() => onThreadSelect?.(thread)}
-                    className="w-full text-left p-2 rounded hover:bg-accent/50 transition-colors group"
+                    className={cn(
+                      "w-full text-left p-2 rounded transition-colors group",
+                      isSelected 
+                        ? "bg-primary/10 border border-primary/20 hover:bg-primary/15" 
+                        : "hover:bg-accent/50"
+                    )}
                   >
                     <div className="flex items-center gap-2">
                       <div className={cn("w-1.5 h-1.5 rounded-full", statusColor)} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium truncate group-hover:text-foreground">
+                        <div className={cn(
+                          "text-xs font-medium truncate group-hover:text-foreground",
+                          isSelected && "text-primary font-semibold"
+                        )}>
                           {thread.title}
                         </div>
                         <div className="text-xs text-muted-foreground">
