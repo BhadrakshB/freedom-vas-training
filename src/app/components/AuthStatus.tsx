@@ -1,13 +1,12 @@
 'use client';
 
 import React from 'react';
-import { useAuth, useAuthOperations } from '@/app/contexts';
+import { useAuth } from '@/app/contexts';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui';
 
 export function AuthStatus() {
-  const { state, signOut, updateActivity, extendSession, timeUntilExpiry, hasRecentActivity } = useAuth();
-  const { signInWithGoogle } = useAuthOperations();
+  const { state, signOut, updateActivity, extendSession, timeUntilExpiry, hasRecentActivity,signInWithGoogle } = useAuth();
   
   if (state.isInitializing) {
     return (
