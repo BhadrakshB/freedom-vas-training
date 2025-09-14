@@ -2,6 +2,9 @@
 
 import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { getUserThreadsByFirebaseUid, type UserThread } from '../lib/actions/user-threads-actions';
+import { createThread, updateThread } from '../lib/db/actions/thread-actions';
+import { createMessage } from '../lib/db/actions/message-actions';
 
 // Types for the core app data
 interface Training {
@@ -51,13 +54,23 @@ interface CoreAppState {
   trainings: Training[];
   activeTraining: Training | null;
   
-  // Thread/chat data
+  // Thread/chat data (from database)
+  userThreads: UserThread[];
   threads: Thread[];
   activeThread: Thread | null;
   
   // UI state
   isLoading: boolean;
+  isLoadingThreads: boolean;
   error: string | null;
+  
+  // Statistics
+  threadStats: {
+    total: number;
+    active: number;
+    completed: number;
+    paused: number;
+  };
   
   // App settings
   settings: {
@@ -71,6 +84,7 @@ interface CoreAppState {
 type CoreAppAction =
   | { type: 'SET_USER_PROFILE'; payload: UserProfile }
   | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_LOADING_THREADS'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
   
   // Training actions
@@ -80,7 +94,13 @@ type CoreAppAction =
   | { type: 'SET_ACTIVE_TRAINING'; payload: Training | null }
   | { type: 'SET_TRAININGS'; payload: Training[] }
   
-  // Thread actions
+  // User threads actions (from database)
+  | { type: 'SET_USER_THREADS'; payload: { threads: UserThread[]; stats: CoreAppState['threadStats'] } }
+  | { type: 'ADD_USER_THREAD'; payload: UserThread }
+  | { type: 'UPDATE_USER_THREAD'; payload: { id: string; updates: Partial<UserThread> } }
+  | { type: 'CLEAR_USER_THREADS' }
+  
+  // Thread actions (UI state)
   | { type: 'ADD_THREAD'; payload: Thread }
   | { type: 'UPDATE_THREAD'; payload: { id: string; updates: Partial<Thread> } }
   | { type: 'DELETE_THREAD'; payload: string }
@@ -97,10 +117,18 @@ const initialState: CoreAppState = {
   userProfile: null,
   trainings: [],
   activeTraining: null,
+  userThreads: [],
   threads: [],
   activeThread: null,
   isLoading: false,
+  isLoadingThreads: false,
   error: null,
+  threadStats: {
+    total: 0,
+    active: 0,
+    completed: 0,
+    paused: 0
+  },
   settings: {
     autoSaveInterval: 30000, // 30 seconds
     maxThreads: 50,
@@ -117,8 +145,56 @@ function coreAppReducer(state: CoreAppState, action: CoreAppAction): CoreAppStat
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
     
+    case 'SET_LOADING_THREADS':
+      return { ...state, isLoadingThreads: action.payload };
+    
     case 'SET_ERROR':
       return { ...state, error: action.payload };
+    
+    // User threads actions
+    case 'SET_USER_THREADS':
+      return {
+        ...state,
+        userThreads: action.payload.threads,
+        threadStats: action.payload.stats
+      };
+    
+    case 'ADD_USER_THREAD':
+      const newThreads = [...state.userThreads, action.payload];
+      return {
+        ...state,
+        userThreads: newThreads,
+        threadStats: {
+          total: newThreads.length,
+          active: newThreads.filter(t => t.status === 'active').length,
+          completed: newThreads.filter(t => t.status === 'completed').length,
+          paused: newThreads.filter(t => t.status === 'paused').length
+        }
+      };
+    
+    case 'UPDATE_USER_THREAD':
+      const updatedThreads = state.userThreads.map(thread =>
+        thread.id === action.payload.id
+          ? { ...thread, ...action.payload.updates, updatedAt: new Date() }
+          : thread
+      );
+      return {
+        ...state,
+        userThreads: updatedThreads,
+        threadStats: {
+          total: updatedThreads.length,
+          active: updatedThreads.filter(t => t.status === 'active').length,
+          completed: updatedThreads.filter(t => t.status === 'completed').length,
+          paused: updatedThreads.filter(t => t.status === 'paused').length
+        }
+      };
+    
+    case 'CLEAR_USER_THREADS':
+      return {
+        ...state,
+        userThreads: [],
+        threadStats: { total: 0, active: 0, completed: 0, paused: 0 }
+      };
     
     // Training actions
     case 'ADD_TRAINING':
@@ -238,13 +314,20 @@ interface CoreAppContextType {
   setUserProfile: (profile: UserProfile) => void;
   updateUserPreferences: (preferences: Partial<UserProfile['preferences']>) => void;
   
+  // User threads actions (database)
+  loadUserThreads: () => Promise<void>;
+  startNewTrainingSession: (title: string, scenario: any, persona: any) => Promise<UserThread>;
+  addMessageToTrainingSession: (threadId: string, content: string, role: 'trainee' | 'AI', isTraining?: boolean) => Promise<void>;
+  completeTrainingSession: (threadId: string, score: any, feedback: any) => Promise<void>;
+  selectUserThread: (thread: UserThread) => void;
+  
   // Training actions
   addTraining: (training: Training) => void;
   updateTraining: (id: string, updates: Partial<Training>) => void;
   deleteTraining: (id: string) => void;
   setActiveTraining: (training: Training | null) => void;
   
-  // Thread actions
+  // Thread actions (UI state)
   addThread: (thread: Thread) => void;
   updateThread: (id: string, updates: Partial<Thread>) => void;
   deleteThread: (id: string) => void;
@@ -267,8 +350,187 @@ const CoreAppDataContext = createContext<CoreAppContextType | undefined>(undefin
 
 // Provider component
 export function CoreAppDataProvider({ children }: { children: React.ReactNode }) {
-  const {state: AuthState} = useAuth();
+  const { state: authState } = useAuth();
   const [state, dispatch] = useReducer(coreAppReducer, initialState);
+
+  // Load user threads when user authenticates/deauthenticates
+  useEffect(() => {
+    if (authState.user?.uid) {
+      loadUserThreads();
+    } else {
+      dispatch({ type: 'CLEAR_USER_THREADS' });
+    }
+  }, [authState.user?.uid]);
+
+  // Load user threads from database
+  const loadUserThreads = useCallback(async () => {
+    if (!authState.user?.uid) {
+      dispatch({ type: 'CLEAR_USER_THREADS' });
+      return;
+    }
+
+    dispatch({ type: 'SET_LOADING_THREADS', payload: true });
+    dispatch({ type: 'SET_ERROR', payload: null });
+
+    try {
+      const result = await getUserThreadsByFirebaseUid(authState.user.uid);
+      
+      if (result.success) {
+        dispatch({
+          type: 'SET_USER_THREADS',
+          payload: {
+            threads: result.threads,
+            stats: {
+              total: result.totalCount,
+              active: result.activeCount,
+              completed: result.completedCount,
+              paused: result.totalCount - result.activeCount - result.completedCount
+            }
+          }
+        });
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: result.error || 'Failed to load training sessions' });
+      }
+    } catch (error) {
+      console.error('Error loading user threads:', error);
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to load training sessions' });
+    } finally {
+      dispatch({ type: 'SET_LOADING_THREADS', payload: false });
+    }
+  }, [authState.user?.uid]);
+
+  // Start a new training session and create it in the database
+  const startNewTrainingSession = useCallback(async (title: string, scenario: any, persona: any): Promise<UserThread> => {
+    if (!authState.user?.uid) {
+      throw new Error('User must be logged in to start a training session');
+    }
+
+    dispatch({ type: 'SET_LOADING', payload: true });
+    
+    try {
+      // First get the user's internal ID
+      const { getUserAuthByProvider } = await import('../lib/db/actions/user-auth-actions');
+      const userAuth = await getUserAuthByProvider('firebase', authState.user.uid);
+      
+      if (!userAuth) {
+        throw new Error('User not found in database');
+      }
+
+      // Create thread in database
+      const newThread = await createThread({
+        title,
+        userId: userAuth.userId,
+        scenario,
+        persona,
+        status: 'active',
+        startedAt: new Date(),
+        visibility: 'private',
+        version: '1',
+        deletedAt: null,
+        score: null,
+        feedback: null,
+        completedAt: null
+      });
+
+      // Convert to UserThread format
+      const userThread: UserThread = {
+        ...newThread,
+        isActive: true,
+        lastActivity: newThread.updatedAt
+      };
+
+      // Add to local state
+      dispatch({ type: 'ADD_USER_THREAD', payload: userThread });
+
+      return userThread;
+    } catch (error) {
+      console.error('Error starting training session:', error);
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to start training session' });
+      throw error;
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, [authState.user]);
+
+  // Add a message to a training session
+  const addMessageToTrainingSession = useCallback(async (
+    threadId: string, 
+    content: string, 
+    role: 'trainee' | 'AI', 
+    isTraining: boolean = true
+  ) => {
+    if (!authState.user?.uid) {
+      throw new Error('User must be logged in to send messages');
+    }
+
+    try {
+      // Create message in database
+      await createMessage({
+        chatId: threadId,
+        role: role === 'trainee' ? 'trainee' : 'AI',
+        parts: { content },
+        attachments: [],
+        isTraining
+      });
+
+      // Update thread's last activity
+      dispatch({ 
+        type: 'UPDATE_USER_THREAD', 
+        payload: { 
+          id: threadId, 
+          updates: { 
+            lastActivity: new Date(),
+            updatedAt: new Date()
+          } 
+        } 
+      });
+    } catch (error) {
+      console.error('Error adding message to training session:', error);
+      throw error;
+    }
+  }, [authState.user]);
+
+  // Complete a training session
+  const completeTrainingSession = useCallback(async (threadId: string, score: any, feedback: any) => {
+    if (!authState.user?.uid) {
+      throw new Error('User must be logged in to complete a training session');
+    }
+
+    try {
+      // Update thread in database
+      await updateThread(threadId, {
+        status: 'completed',
+        completedAt: new Date(),
+        score,
+        feedback
+      } as any);
+
+      // Update in local state
+      dispatch({
+        type: 'UPDATE_USER_THREAD',
+        payload: {
+          id: threadId,
+          updates: {
+            status: 'completed',
+            completedAt: new Date(),
+            score,
+            feedback,
+            isActive: false
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error completing training session:', error);
+      throw error;
+    }
+  }, [authState.user]);
+
+  // Select a user thread (for navigation/viewing)
+  const selectUserThread = useCallback((thread: UserThread) => {
+    // This could be used to load the thread's messages and set it as active
+    console.log('Selected thread:', thread.id, thread.title);
+    // You could dispatch actions here to load thread details, messages, etc.
+  }, []);
 
   // Action creators
   const setUserProfile = useCallback((profile: UserProfile) => {
@@ -360,18 +622,28 @@ export function CoreAppDataProvider({ children }: { children: React.ReactNode })
     state,
     setUserProfile,
     updateUserPreferences,
+    // User threads methods
+    loadUserThreads,
+    startNewTrainingSession,
+    addMessageToTrainingSession,
+    completeTrainingSession,
+    selectUserThread,
+    // Training methods
     addTraining,
     updateTraining,
     deleteTraining,
     setActiveTraining,
+    // Thread methods
     addThread,
     updateThread,
     deleteThread,
     setActiveThread,
     addMessageToThread,
+    // Utility methods
     setLoading,
     setError,
     updateSettings,
+    // Computed properties
     activeTrainingThreads,
     completedTrainings,
     recentThreads,

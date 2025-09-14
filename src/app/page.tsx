@@ -16,6 +16,7 @@ import {
   TrainingStatusIndicator,
   ProtectedRoute,
 } from "./components";
+import { LeftSidebar } from "./components/LeftSidebar";
 import {
   startTrainingSession,
   updateTrainingSession,
@@ -574,11 +575,16 @@ function ChatPage() {
   };
 
   return (
-    <div
-      className={`h-screen flex flex-col bg-background relative ${
-        isResizing ? "select-none" : ""
-      }`}
-    >
+    <div className="h-screen flex bg-background">
+      {/* Left Sidebar */}
+      <LeftSidebar />
+      
+      {/* Main Content */}
+      <div
+        className={`flex-1 flex flex-col bg-background relative ${
+          isResizing ? "select-none" : ""
+        }`}
+      >
       {/* Header Section */}
       <header className="flex items-center justify-between p-3 sm:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-foreground truncate pr-2">
@@ -734,12 +740,6 @@ function ChatPage() {
                   disabled={isLoading}
                   defaultOpen={false}
                 />
-
-                {/* Auth Status Panel */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-muted-foreground">Authentication Status</h3>
-                  <AuthStatus />
-                </div>
               </>
             ) : (
               <>
@@ -755,19 +755,20 @@ function ChatPage() {
                 {scenario && (
                   <ScenarioDisplayPanel
                     scenario={scenario}
-                    defaultOpen={false}
+                    defaultOpen={true}
                   />
                 )}
 
                 {/* Generated Persona Display Panel */}
                 {persona && (
-                  <PersonaDisplayPanel persona={persona} defaultOpen={false} />
+                  <PersonaDisplayPanel persona={persona} defaultOpen={true} />
                 )}
               </>
             )}
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 }

@@ -7,6 +7,10 @@ export { ThemeToggle } from './ThemeToggle';
 export { AuthStatus } from './AuthStatus';
 export { ProtectedRoute } from './ProtectedRoute';
 
+// Sidebar Components
+export { LeftSidebar } from './LeftSidebar';
+export { UserThreadsList } from './UserThreadsList';
+
 // Chat Interface Components
 export { MessageArea, } from './MessageArea';
 export { MessageInput } from './MessageInput';
