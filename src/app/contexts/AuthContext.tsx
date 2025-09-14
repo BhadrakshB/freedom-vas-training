@@ -272,7 +272,7 @@ interface AuthContextType {
   // User actions
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  storeUserProfile: (user : AuthUser) => Promise<void>;
+  storeUserProfile: (user: AuthUser) => Promise<void>;
 
   // Session management
   updateActivity: () => void;
@@ -417,8 +417,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Store user profile in database
       setTimeout(() => {
         const input = convertFirebaseUser(userCredential.user);
-          if (input == null) return;
-          storeUserProfile(input);
+        if (input == null) return;
+        storeUserProfile(input);
       }, 100);
     } catch (error) {
       dispatch({ type: "SET_ERROR", payload: categorizeAuthError(error) });
@@ -439,8 +439,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Store user profile in database
       setTimeout(() => {
         const input = convertFirebaseUser(userCredential.user);
-          if (input == null) return;
-          storeUserProfile(input);
+        if (input == null) return;
+        storeUserProfile(input);
       }, 100);
     } catch (error) {
       dispatch({ type: "SET_ERROR", payload: categorizeAuthError(error) });
@@ -674,77 +674,116 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [timeUntilExpiry, state.user]);
 
-const storeUserProfile = useCallback(async (user: AuthUser) => {
-    console.log("storeUserProfile: Starting user profile storage process");
-    
-    const userToStore = user || state.user;
-    if (!userToStore) {
-      console.log("storeUserProfile: No user found, exiting early");
-      return;
-    }
+  const storeUserProfile = useCallback(
+    async (user: AuthUser) => {
+      console.log("storeUserProfile: Starting user profile storage process");
 
-    console.log("storeUserProfile: Processing user", { 
-      uid: userToStore.uid, 
-      email: userToStore.email,
-      providerCount: userToStore.providerData.length 
-    });
-
-    try {
-      console.log("storeUserProfile: Importing database actions");
-      // Import database actions dynamically to avoid circular dependencies
-      const { getUserById, createUser, getUserAuthByProvider, createUserAuth } =
-        await import("@/app/lib/db/actions");
-
-      console.log("storeUserProfile: Checking if user exists in database");
-      // Check if user exists in our database
-      let dbAuthUser = await getUserAuthByProvider('google', userToStore.uid);
-      let dbUser = await getUserById(dbAuthUser.userId);
-
-      // Create user if doesn't exist
-      if (!dbUser) {
-        console.log("storeUserProfile: User not found in database, creating new user");
-        dbUser = await createUser({
-          deletedAt: null,
-        });
-        console.log("storeUserProfile: New user created", { id: dbUser.id });
-      } else {
-        console.log("storeUserProfile: Existing user found", { id: dbUser.id });
+      const userToStore = user || state.user;
+      if (!userToStore) {
+        console.log("storeUserProfile: No user found, exiting early");
+        return;
       }
 
-      console.log("storeUserProfile: Processing authentication records for providers");
-      // Handle authentication records for each provider
-      for (const provider of userToStore.providerData) {
-        console.log("storeUserProfile: Processing provider", { 
-          providerId: provider.providerId, 
-          providerUid: provider.uid 
-        });
-        
-        const existingAuth = await getUserAuthByProvider(
-          provider.providerId,
-          provider.uid
+      console.log("storeUserProfile: Processing user", {
+        uid: userToStore.uid,
+        email: userToStore.email,
+        providerCount: userToStore.providerData.length,
+      });
+
+      try {
+        console.log("storeUserProfile: Importing database actions");
+        // Import database actions dynamically to avoid circular dependencies
+        const { getUserById, createUser } = await import(
+          "@/app/lib/db/actions/user_actions"
+        );
+        const { getUserAuthByProvider, createUserAuth } = await import(
+          "@/app/lib/db/actions/user-auth-actions"
         );
 
-        if (!existingAuth) {
-          console.log("storeUserProfile: Creating new auth record for provider", provider.providerId);
-          await createUserAuth({
-            userId: dbUser.id,
-            provider: provider.providerId,
-            providerUserId: provider.uid,
-            email: provider.email || userToStore.email,
-            password: null, // Firebase handles auth, we don't store passwords
+        // Process each provider to determine what needs to be created
+        for (const provider of userToStore.providerData) {
+          console.log("storeUserProfile: Processing provider", {
+            providerId: provider.providerId,
+            providerUid: provider.uid,
           });
-          console.log("storeUserProfile: Auth record created for provider", provider.providerId);
-        } else {
-          console.log("storeUserProfile: Auth record already exists for provider", provider.providerId);
-      }
-      }
 
-      console.log("storeUserProfile: User profile stored successfully");
-    } catch (error) {
-      console.error("storeUserProfile: Error storing user profile:", error);
-      dispatch({ type: "SET_ERROR", payload: categorizeAuthError(error) });
-    }
-  }, [state.user]);
+          // Step 1: Check if UserAuth entry exists for this provider
+          const existingAuth = await getUserAuthByProvider(
+            provider.providerId,
+            provider.uid
+          );
+
+          if (!existingAuth) {
+            // Case 1: Completely new user - create both User and UserAuth entries
+            console.log(
+              "storeUserProfile: No auth record found, creating new user and auth record"
+            );
+
+            const newUser = await createUser({
+              deletedAt: null,
+            });
+            console.log("storeUserProfile: New user created", {
+              id: newUser.id,
+            });
+
+            await createUserAuth({
+              userId: newUser.id,
+              provider: provider.providerId,
+              providerUserId: provider.uid,
+              email: provider.email || userToStore.email,
+              password: null, // Firebase handles auth, we don't store passwords
+            });
+            console.log(
+              "storeUserProfile: Auth record created for provider",
+              provider.providerId
+            );
+          } else {
+            // Step 2: UserAuth exists, check if User exists
+            console.log(
+              "storeUserProfile: Auth record exists, checking if user exists",
+              {
+                authId: existingAuth.id,
+                userId: existingAuth.userId,
+              }
+            );
+
+            const existingUser = await getUserById(existingAuth.userId);
+
+            if (!existingUser) {
+              // Case 2: UserAuth exists but User doesn't - create only User entry
+              console.log(
+                "storeUserProfile: User record missing, creating user entry"
+              );
+
+              await createUser({
+                deletedAt: null,
+              });
+              console.log(
+                "storeUserProfile: User record created for existing auth"
+              );
+            } else {
+              // Case 3: Both User and UserAuth exist - no action needed
+              console.log(
+                "storeUserProfile: Both user and auth records exist, no action needed",
+                {
+                  userId: existingUser.id,
+                  authId: existingAuth.id,
+                }
+              );
+            }
+          }
+        }
+
+        console.log(
+          "storeUserProfile: User profile storage completed successfully"
+        );
+      } catch (error) {
+        console.error("storeUserProfile: Error storing user profile:", error);
+        dispatch({ type: "SET_ERROR", payload: categorizeAuthError(error) });
+      }
+    },
+    [state.user]
+  );
 
   const contextValue: AuthContextType = {
     state,
