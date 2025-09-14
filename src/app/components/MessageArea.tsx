@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ScrollArea } from "@/app/components/ui/scroll-area";
+
 import { cn } from "@/app/lib/utils";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 
@@ -12,7 +12,7 @@ interface MessageAreaProps {
 
 function MessageArea({ messages, className }: MessageAreaProps) {
   return (
-    <ScrollArea className={cn("flex-1 p-3 sm:p-4 md:p-6", className)}>
+    <div className={cn("flex-1 overflow-y-auto scrollbar-hide p-3 sm:p-4 md:p-6", className)}>
       <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
         {messages.length === 0 ? (
           <EmptyState />
@@ -20,7 +20,7 @@ function MessageArea({ messages, className }: MessageAreaProps) {
           <MessageList messages={messages} />
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 

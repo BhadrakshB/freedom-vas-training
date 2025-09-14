@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { AuthStatus } from "./AuthStatus";
@@ -11,18 +11,16 @@ import type { UserThread } from "../lib/actions/user-threads-actions";
 
 interface LeftSidebarProps {
   children?: React.ReactNode;
-  defaultCollapsed?: boolean;
   className?: string;
   onThreadSelect?: (thread: UserThread) => void;
 }
 
 export function LeftSidebar({
   children,
-  defaultCollapsed = false,
   className,
   onThreadSelect,
 }: LeftSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { state: authState } = useAuth();
 
@@ -38,22 +36,13 @@ export function LeftSidebar({
     setIsMobileOpen(false);
   }, []);
 
-  // Mobile overlay when open
-  const mobileOverlay = isMobileOpen && (
-    <div
-      className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-      onClick={closeMobile}
-      aria-hidden="true"
-    />
-  );
-
   return (
     <>
       {/* Mobile hamburger button */}
       <Button
         variant="ghost"
         size="sm"
-        className="lg:hidden fixed top-4 left-4 z-50 bg-background/80 backdrop-blur-sm"
+        className="lg:hidden fixed top-3 left-3 z-50 h-8 w-8 p-0"
         onClick={toggleMobile}
       >
         {isMobileOpen ? (
@@ -63,139 +52,76 @@ export function LeftSidebar({
         )}
       </Button>
 
-      {/* Mobile overlay */}
-      {mobileOverlay}
+      {/* Desktop toggle button - positioned outside sidebar */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn(
+          "hidden lg:flex fixed top-3 z-40 h-8 w-8 p-0 transition-all duration-200",
+          isCollapsed ? "left-3" : "left-[276px]"
+        )}
+        onClick={toggleCollapsed}
+      >
+        {isCollapsed ? (
+          <ChevronRight className="h-4 w-4" />
+        ) : (
+          <ChevronLeft className="h-4 w-4" />
+        )}
+      </Button>
 
-      {/* Sidebar */}
+      {/* Mobile overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/20 z-40 lg:hidden"
+          onClick={closeMobile}
+        />
+      )}
+
+      {/* Sidebar Drawer */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 border-r transition-all duration-300 z-50",
+          "fixed left-0 top-0 h-full bg-background border-r border-border/50 transition-all duration-200 z-50",
           // Desktop behavior
           "lg:relative lg:z-auto",
-          isCollapsed ? "lg:w-16" : "lg:w-80",
+          isCollapsed ? "lg:w-0 lg:border-r-0" : "lg:w-72",
           // Mobile behavior
           isMobileOpen
-            ? "w-80 translate-x-0"
-            : "w-80 -translate-x-full lg:translate-x-0",
+            ? "w-72 translate-x-0"
+            : "w-72 -translate-x-full lg:translate-x-0",
+          // Hide content when collapsed on desktop
+          isCollapsed && "lg:overflow-hidden",
           className
         )}
       >
-        {/* Header with collapse/expand button */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div
-            className={cn(
-              "flex items-center gap-2 transition-opacity duration-200",
-              isCollapsed && "lg:opacity-0 lg:invisible"
-            )}
-          >
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground text-sm font-bold">
-                STR
-              </span>
-            </div>
-            <span className="font-semibold text-sm">Training Assistant</span>
+        <div
+          className={cn(
+            "flex flex-col h-full transition-opacity duration-200",
+            isCollapsed && "lg:opacity-0 lg:pointer-events-none"
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-border/30">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={closeMobile}
+              className="lg:hidden h-6 w-6 p-0"
+            >
+              <X className="h-3 w-3" />
+            </Button>
           </div>
 
-          {/* Desktop collapse button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleCollapsed}
-            className="hidden lg:flex h-8 w-8 p-0"
-            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {isCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto scrollbar-hide p-3 space-y-4">
+            {/* Auth Section */}
+            <AuthStatus />
+
+            {/* Threads Section */}
+            {authState.user && (
+              <UserThreadsList onThreadSelect={onThreadSelect} />
             )}
-          </Button>
 
-          {/* Mobile close button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={closeMobile}
-            className="lg:hidden h-8 w-8 p-0"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Sidebar content */}
-        <div className="flex flex-col h-full overflow-hidden">
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-4 space-y-6">
-              {/* Authentication Status Section */}
-              <div
-                className={cn(
-                  "transition-opacity duration-200",
-                  isCollapsed && "lg:opacity-0 lg:invisible"
-                )}
-              >
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-muted-foreground">
-                    Authentication
-                  </h3>
-                  <AuthStatus />
-                </div>
-              </div>
-
-              {/* User Threads Section - Only show when authenticated */}
-              {authState.user && (
-                <div
-                  className={cn(
-                    "transition-opacity duration-200",
-                    isCollapsed && "lg:opacity-0 lg:invisible"
-                  )}
-                >
-                  <UserThreadsList onThreadSelect={onThreadSelect} />
-                </div>
-              )}
-
-              {/* Collapsed state indicators */}
-              {isCollapsed && (
-                <div className="hidden lg:flex flex-col items-center space-y-4 pt-4">
-                  {/* Auth status indicator */}
-                  <div
-                    className={cn(
-                      "w-3 h-3 rounded-full border-2",
-                      authState.user
-                        ? "bg-green-500 border-green-500"
-                        : "bg-gray-500 border-gray-500"
-                    )}
-                    title={
-                      authState.user ? "Authenticated" : "Not authenticated"
-                    }
-                  />
-
-                  {/* Threads count indicator */}
-                  {authState.user && (
-                    <div
-                      className="w-8 h-6 bg-primary rounded text-primary-foreground text-xs flex items-center justify-center font-medium"
-                      title="Training sessions"
-                    >
-                      {/* This will be populated by UserThreadsList */}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Additional content */}
-              {children}
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div
-            className={cn(
-              "p-4 border-t transition-opacity duration-200",
-              isCollapsed && "lg:opacity-0 lg:invisible"
-            )}
-          >
-            <div className="text-xs text-muted-foreground text-center">
-              STR Training Assistant v1.0
-            </div>
+            {children}
           </div>
         </div>
       </aside>

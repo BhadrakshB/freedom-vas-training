@@ -117,8 +117,10 @@
   * {
     @apply border-border outline-ring/50;
   }
-  body {
+  html, body {
     @apply bg-background text-foreground transition-colors duration-300;
+    height: 100%;
+    overflow: hidden;
   }
   
   /* Enhanced theme transition animations */
@@ -139,5 +141,15 @@
   .text-muted-foreground,
   .border-border {
     @apply transition-colors duration-300;
+  }
+  
+  /* Hide scrollbars */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* Internet Explorer 10+ */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Safari and Chrome */
   }
 }

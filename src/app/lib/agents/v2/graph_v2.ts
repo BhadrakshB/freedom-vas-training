@@ -62,7 +62,7 @@ export const feedbackSchema = baseLLMSchema.extend({
 });
 export type FeedbackSchema = z.infer<typeof feedbackSchema>;
 
-export type TrainingStateType = 'start' | 'ongoing' | 'completed' | 'error' |'paused';
+export type TrainingStateType = 'start' | 'ongoing' | 'completed' | 'error' | 'paused';
 
 export const TrainingState = Annotation.Root({
   conversationHistory: Annotation<BaseMessage[]>({

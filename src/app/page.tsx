@@ -945,7 +945,7 @@ function ChatPage() {
             className="border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col"
             style={{ width: `${panelWidth}px` }}
           >
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-4">
               {!trainingStarted ? (
                 <>
                   {/* Custom Scenario Input Panel */}
