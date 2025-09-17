@@ -5,8 +5,48 @@ import {
   PersonaGeneratorSchema,
   ScenarioGeneratorSchema,
   TrainingStateType,
+  MessageRatingSchema,
+  AlternativeSuggestionsSchema,
 } from "../lib/agents/v2/graph_v2";
 import { ErrorType } from "../lib/error-handling";
+
+import { HumanMessage } from "@langchain/core/messages";
+
+export interface ExtendedHumanMessage extends HumanMessage {
+  messageRating: MessageRatingSchema | null;
+  messageSuggestions: AlternativeSuggestionsSchema | null;
+
+  toHumanMessage(): HumanMessage;
+}
+
+export class ExtendedHumanMessageImpl
+  extends HumanMessage
+  implements ExtendedHumanMessage
+{
+  messageRating: MessageRatingSchema | null;
+  messageSuggestions: AlternativeSuggestionsSchema | null;
+
+  constructor(
+    content: string | any,
+    messageRating: MessageRatingSchema | null = null,
+    messageSuggestions: AlternativeSuggestionsSchema | null = null
+  ) {
+    super(content);
+    this.messageRating = messageRating;
+    this.messageSuggestions = messageSuggestions;
+  }
+
+  toHumanMessage(): HumanMessage {
+    // Create a new HumanMessage with the same content and properties
+    const humanMessage = new HumanMessage({
+      content: this.content,
+      additional_kwargs: this.additional_kwargs,
+      response_metadata: this.response_metadata,
+      id: this.id,
+    });
+    return humanMessage;
+  }
+}
 
 export interface TrainingState {
   messages: BaseMessage[];
@@ -110,8 +150,11 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
   const [errorType, setErrorType] = useState<ErrorType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [trainingStarted, setTrainingStarted] = useState(false);
-  const [trainingStatus, setTrainingStatus] = useState<TrainingStateType>("start");
-  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
+  const [trainingStatus, setTrainingStatus] =
+    useState<TrainingStateType>("start");
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(
+    null
+  );
   const [panelWidth, setPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);

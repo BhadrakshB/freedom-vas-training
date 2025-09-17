@@ -1,5 +1,5 @@
 import { HumanMessage } from "@langchain/core/messages"
-import { TrainingState } from "./graph_v2"
+import { MessageRatingState, TrainingState } from "./graph_v2"
 
 
 var scenarioGeneratorPromptXML = (state: typeof TrainingState.State) => {
@@ -133,7 +133,13 @@ var customerSimulatorPromptXML = (state: typeof TrainingState.State) => {
     <INPUTS>
       <Scenario>${JSON.stringify(state.scenario)}</Scenario>
       <Persona>${JSON.stringify(state.persona)}</Persona>
-      <Conversation_History>${JSON.stringify(state.conversationHistory)}</Conversation_History>
+      <Conversation_History>${state.conversationHistory.map((element, index) => {
+        return {
+          index,
+          role: element instanceof HumanMessage ? 'user' : 'system',
+          content: element.content
+        }
+      })}</Conversation_History>
     </INPUTS>
     <OUTPUT_SCHEMA>
       <Customer_Simulation>
@@ -173,7 +179,7 @@ var feedbackGeneratorPromptXML = (state: typeof TrainingState.State) => {
     <INPUTS>
       <Scenario>${JSON.stringify(state.scenario)}</Scenario>
       <Persona>${JSON.stringify(state.persona)}</Persona>
-      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
+      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'system', content: message.content })))}</Conversation_History>
     </INPUTS>
     <OUTPUT_SCHEMA>
       <Training_Feedback>
@@ -224,6 +230,82 @@ var feedbackGeneratorPromptXML = (state: typeof TrainingState.State) => {
           <Item>Use phrases like "I understand how frustrating this is" to build rapport</Item>
         </General_Suggestions>
       </Training_Feedback>
+    </EXAMPLE_OUTPUT>
+  </INSTRUCTIONS>
+</Prompt>`
+}
+
+var messageRatingPromptXML = (state: typeof MessageRatingState.State) => {
+  return `<Prompt>
+  <SYSTEM>You are the Message Rating Agent for an STR virtual assistant training platform. Your role is to evaluate the latest message from the trainee (user) in the context of the provided scenario, persona, and conversation history, assigning a numerical rating and rationale.</SYSTEM>
+  <INSTRUCTIONS>
+    <RULES>
+      <Rule>Output must strictly adhere to the provided schema with no additional fields or content.</Rule>
+      <Rule>Rate the latest trainee message (role="user") based solely on the scenario, persona, conversation history, and scenario's success criteria.</Rule>
+      <Rule>Do not invent or assume details beyond the provided inputs.</Rule>
+      <Rule>Assign a rating from 0 to 10, where 0 is completely ineffective and 10 is perfectly aligned with scenario goals and persona expectations.</Rule>
+      <Rule>Provide a concise rationale (1-2 sentences) explaining the rating, focusing on empathy, professionalism, and problem-solving.</Rule>
+      <Rule>Ensure the rating reflects the message's impact on resolving the scenario's core problem.</Rule>
+    </RULES>
+    <INPUTS>
+      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+      <Persona>${JSON.stringify(state.persona)}</Persona>
+      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
+      <Latest_Trainee_Message>${JSON.stringify(state.conversationHistory.filter(message => message instanceof HumanMessage).slice(-1)[0]?.content || "None")}</Latest_Trainee_Message>
+    </INPUTS>
+    <OUTPUT_SCHEMA>
+      <Message_Rating>
+        <Rating>number</Rating>
+        <Rationale>string</Rationale>
+      </Message_Rating>
+    </OUTPUT_SCHEMA>
+    <EXAMPLE_OUTPUT>
+      <Message_Rating>
+        <Rating>6</Rating>
+        <Rationale>The trainee's response was polite but lacked empathy, missing an opportunity to acknowledge the guest's frustration as per the persona's expectations.</Rationale>
+      </Message_Rating>
+    </EXAMPLE_OUTPUT>
+  </INSTRUCTIONS>
+</Prompt>`
+}
+
+var alternativeSuggestionsPromptXML =  (state: typeof MessageRatingState.State) => {
+  return `<Prompt>
+  <SYSTEM>You are the Alternative Suggestions Agent for an STR virtual assistant training platform. Your role is to analyze the latest trainee (user) message and provide 1-3 alternative responses that are more effective, empathetic, or professional, based on the scenario, persona, and conversation history.</SYSTEM>
+  <INSTRUCTIONS>
+    <RULES>
+      <Rule>Output must strictly adhere to the provided schema with no additional fields or content.</Rule>
+      <Rule>Generate 1-3 alternative responses that better address the scenario's core problem and align with the persona's expectations and communication style.</Rule>
+      <Rule>Do not invent or assume details beyond the provided scenario, persona, conversation history, or latest trainee message.</Rule>
+      <Rule>Each alternative response must be concise, realistic, and suitable for an STR virtual assistant.</Rule>
+      <Rule>Provide a brief explanation (1-2 sentences) for each alternative, justifying why it improves on the trainee's message.</Rule>
+      <Rule>Ensure suggestions enhance empathy, professionalism, or problem-solving relative to the trainee's message.</Rule>
+    </RULES>
+    <INPUTS>
+      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+      <Persona>${JSON.stringify(state.persona)}</Persona>
+      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
+      <Latest_Trainee_Message>${JSON.stringify(state.conversationHistory.filter(message => message instanceof HumanMessage).slice(-1)[0]?.content || "None")}</Latest_Trainee_Message>
+    </INPUTS>
+    <OUTPUT_SCHEMA>
+      <Alternative_Suggestions>
+        <Suggestion>
+          <Response>string</Response>
+          <Explanation>string</Explanation>
+        </Suggestion>
+      </Alternative_Suggestions>
+    </OUTPUT_SCHEMA>
+    <EXAMPLE_OUTPUT>
+      <Alternative_Suggestions>
+        <Suggestion>
+          <Response>I'm so sorry for the inconvenience this has caused you. Let me arrange alternative accommodations immediately and escalate this to my manager for a potential refund.</Response>
+          <Explanation>This response shows empathy and proactively addresses the guest's issue, aligning with the scenario's success criteria.</Explanation>
+        </Suggestion>
+        <Suggestion>
+          <Response>I understand how frustrating it must be to arrive and find another guest here. I'll check available properties now and get back to you within 10 minutes with a solution.</Response>
+          <Explanation>This response acknowledges the guest's frustration and commits to a quick resolution, improving professionalism.</Explanation>
+        </Suggestion>
+      </Alternative_Suggestions>
     </EXAMPLE_OUTPUT>
   </INSTRUCTIONS>
 </Prompt>`
@@ -353,7 +435,13 @@ var customerSimulatorPromptJSON = (state: typeof TrainingState.State) => {
             INPUTS: {
                 Scenario: state.scenario,
                 Persona: state.persona,
-                Conversation_History: state.conversationHistory
+                Conversation_History: state.conversationHistory.map((message, index) => {
+                  return { 
+                    index, 
+                    role: message instanceof HumanMessage ? 'user' : 'ai', 
+                    content: message.content 
+                  }
+                })
             },
             OUTPUT_SCHEMA: {
                 Customer_Simulation: {
@@ -448,6 +536,8 @@ export {
     personaGeneratorPromptXML,
     customerSimulatorPromptXML,
     feedbackGeneratorPromptXML,
+    messageRatingPromptXML,
+    alternativeSuggestionsPromptXML,
     scenarioGeneratorPromptJSON,
     personaGeneratorPromptJSON,
     customerSimulatorPromptJSON,
