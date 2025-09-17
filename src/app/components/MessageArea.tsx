@@ -67,7 +67,7 @@ function MessageList({ messages }: { messages: BaseMessage[] }) {
 }
 
 function MessageBubble({ message }: { message: BaseMessage }) {
-  const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const [showTooltip, setShowTooltip] = React.useState(false);
 
   const isHuman =
     message instanceof HumanMessage ||
@@ -81,12 +81,16 @@ function MessageBubble({ message }: { message: BaseMessage }) {
       ? message.messageSuggestions?.Alternative_Suggestions
       : undefined;
 
-  // Rating color based on score
-  const getRatingColor = (rating: number) => {
-    if (rating >= 8) return "bg-green-100 text-green-800 border-green-200";
-    if (rating >= 6) return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    return "bg-red-100 text-red-800 border-red-200";
+  // Rating color for text based on score
+  const getRatingTextColor = (rating: number) => {
+    if (rating >= 8) return "text-green-600";
+    if (rating >= 6) return "text-yellow-600";
+    return "text-red-600";
   };
+
+  // Only show feedback indicator if there's rating or suggestions
+  const hasFeedback =
+    rating !== undefined || (listOfSuggestions && listOfSuggestions.length > 0);
 
   return (
     <div
@@ -112,65 +116,73 @@ function MessageBubble({ message }: { message: BaseMessage }) {
           </div>
         </div>
 
-        {/* Rating and Suggestions Toggle - only for human messages */}
+        {/* Rating and Suggestions - only for human messages */}
         {isHuman &&
-          (rating || (listOfSuggestions && listOfSuggestions.length > 0)) && (
+          (rating !== undefined ||
+            (listOfSuggestions && listOfSuggestions.length > 0)) && (
             <div className="flex items-center gap-2">
-              {/* Rating display */}
-              {rating && (
+              {/* Always visible rating */}
+              {rating !== undefined && (
                 <div
                   className={cn(
                     "text-xs px-2 py-1 rounded-full border font-medium flex items-center gap-1",
-                    getRatingColor(rating)
+                    rating >= 8
+                      ? "bg-green-100 text-green-800 border-green-200"
+                      : rating >= 6
+                      ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                      : "bg-red-100 text-red-800 border-red-200"
                   )}
                 >
-                  <span className="text-xs">⭐</span>
                   <span>{rating}/10</span>
+                  <span className="text-yellow-500">⭐</span>
                 </div>
               )}
 
-              {/* Suggestions toggle button */}
+              {/* Suggestions hover indicator */}
               {listOfSuggestions && listOfSuggestions.length > 0 && (
-                <button
-                  onClick={() => setShowSuggestions(!showSuggestions)}
-                  className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors flex items-center gap-1 font-medium"
+                <div
+                  className="relative"
+                  onMouseEnter={() => setShowTooltip(true)}
+                  onMouseLeave={() => setShowTooltip(false)}
                 >
-                  <span>💡</span>
-                  <span>{listOfSuggestions.length} suggestions</span>
-                  <span
-                    className={cn(
-                      "transition-transform",
-                      showSuggestions ? "rotate-180" : ""
-                    )}
-                  >
-                    ▼
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
+                  <div className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors cursor-pointer flex items-center gap-1 font-medium">
+                    <span>💡</span>
+                    <span>{listOfSuggestions.length} suggestions</span>
+                  </div>
 
-        {/* Collapsible Suggestions */}
-        {isHuman &&
-          showSuggestions &&
-          listOfSuggestions &&
-          listOfSuggestions.length > 0 && (
-            <div className="w-full max-w-[85%] sm:max-w-[80%] md:max-w-[70%] animate-in slide-in-from-top-2 duration-200">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
-                <div className="text-xs font-medium text-blue-900 mb-2">
-                  Alternative responses:
-                </div>
-                <div className="space-y-2">
-                  {listOfSuggestions.map((suggestion, index) => (
-                    <div
-                      key={index}
-                      className="text-xs p-2 rounded bg-white border border-blue-100 text-blue-900 leading-relaxed hover:border-blue-300 transition-colors cursor-pointer"
-                    >
-                      {suggestion.Response}
+                  {/* Hover Tooltip with Blue Design */}
+                  {showTooltip && (
+                    <div className="absolute top-full right-0 mt-2 w-96 max-w-[90vw] z-50 animate-in fade-in-0 zoom-in-95 duration-200">
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                        {/* Blue Header */}
+                        <div className="px-4 py-3 bg-blue-100 border-b border-blue-200">
+                          <div className="text-sm font-medium text-blue-700 flex items-center gap-2">
+                            <span className="text-blue-600">💡</span>
+                            <span>Alternate Responses</span>
+                          </div>
+                        </div>
+
+                        {/* Suggestions List */}
+                        <div className="p-4 space-y-3">
+                          {listOfSuggestions.map((suggestion, index) => (
+                            <div
+                              key={index}
+                              className="relative pl-4 py-2 text-sm text-gray-700 leading-relaxed bg-gray-100 rounded"
+                            >
+                              {/* Short blue accent bar */}
+                              <div className="absolute left-0 top-0 w-1 h-10 bg-blue-400 rounded-full right-2"></div>
+                              {suggestion.Response}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Tooltip Arrow pointing up */}
+                      <div className="absolute bottom-full right-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-200"></div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
       </div>
