@@ -1,4 +1,4 @@
-import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, HumanMessage, MessageContent } from "@langchain/core/messages";
 import {
   Annotation,
   END,
@@ -463,7 +463,7 @@ export const MessageRatingState = Annotation.Root({
     reducer: messagesStateReducer,
     default: () => [],
   }),
-  latestUserMessage: Annotation<string>(),
+  latestUserMessage: Annotation<MessageContent>(),
   scenario: Annotation<ScenarioGeneratorSchema | null>(),
   persona: Annotation<PersonaGeneratorSchema | null>(),
   rating: Annotation<MessageRatingSchema | null>(),

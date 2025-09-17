@@ -29,7 +29,7 @@ import {
   PersonaGeneratorSchema,
 } from "./lib/agents/v2/graph_v2";
 import { TrainingError, ErrorType, classifyError } from "./lib/error-handling";
-import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
+import { ExtendedHumanMessageImpl, TrainingProvider, trainingContext } from "./contexts/TrainingContext";
 import { useAuth } from "./contexts/AuthContext";
 import { CoreAppDataContext } from "./contexts/CoreAppDataContext";
 import { getOrCreateUserByFirebaseUid } from "./lib/db/actions/user-actions";
@@ -322,7 +322,7 @@ function ChatPage() {
       return;
     }
 
-    const newMessage: HumanMessage = new HumanMessage(content);
+    var newMessage: HumanMessage = new HumanMessage(content);
 
     const updatedMessages = [...messages, newMessage];
     setMessages(updatedMessages);
@@ -336,7 +336,9 @@ function ChatPage() {
       const result = await updateTrainingSession({
         scenario,
         guestPersona: persona,
-        messages: updatedMessages,
+messages: updatedMessages.map(msg => 
+          msg instanceof ExtendedHumanMessageImpl ? msg.toHumanMessage() : msg
+        ),
       });
 
       if (result.error) {
@@ -370,7 +372,22 @@ function ChatPage() {
         `${(result.guestResponse as string) || "No response received."}`
       );
 
-      setMessages([...messages, newMessage, guestMessage]);
+      const newUpdatedMessage = new ExtendedHumanMessageImpl(
+        content,result.lastMessageRating,
+       result.lastMessageRatingReason
+        
+      )
+
+      console.log("New message created:", {
+        content: newUpdatedMessage.content,
+        type: newUpdatedMessage.getType(),
+        rating: newUpdatedMessage.messageRating,
+        ratingReason: newUpdatedMessage.messageRating,
+        timestamp: new Date().toISOString()
+      });
+      
+
+      setMessages([...messages, newUpdatedMessage, guestMessage]);
 
       // Save messages to database if thread exists
       if (currentThreadId && authUser?.uid) {

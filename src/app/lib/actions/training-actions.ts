@@ -2,7 +2,7 @@
 
 import { BaseMessage, MessageContent } from "@langchain/core/messages";
 import { TrainingError, ERROR_MESSAGES } from "../error-handling";
-import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow, TrainingStateType, FeedbackSchema } from "@/lib/agents/v2/graph_v2"
+import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow, TrainingStateType, FeedbackSchema, messageRatingWorkflow, MessageRatingSchema, AlternativeSuggestionsSchema } from "@/lib/agents/v2/graph_v2"
 
 interface StartTrainingResponse {
   scenario?: ScenarioGeneratorSchema,
@@ -70,6 +70,8 @@ interface UpdateTrainingResponse {
   messages: BaseMessage[],
   guestResponse: MessageContent,
   status: TrainingStateType,
+  lastMessageRating?: MessageRatingSchema | null,
+  lastMessageRatingReason?: AlternativeSuggestionsSchema | null,
   feedback?: FeedbackSchema,
   error?: string;
   errorType?: string;
@@ -109,18 +111,19 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
     console.log(`Updating training session with ${request.messages.length} messages`);
 
     // Create guest agent and process conversation
-    const data = await workflow.invoke({
+const [data, currMessageRating] = await Promise.all([
+      workflow.invoke({
       conversationHistory: request.messages,
       persona: request.guestPersona,
       scenario: request.scenario,
-    });
-
-    console.log("=== WORKFLOW STATE RETURNED ===");
-    console.log("Full State:", JSON.stringify(data, null, 2));
-    console.log("Messages:", data?.conversationHistory?.length || 0);
-    console.log("Scenario:", data?.scenario ? "Present" : "Not present");
-    console.log("Persona:", data?.persona ? "Present" : "Not present");
-    console.log("===============================");
+      }),
+      messageRatingWorkflow.invoke({
+      conversationHistory: request.messages,
+        latestUserMessage: request.messages[request.messages.length - 1].content,
+        scenario: request.scenario,
+        persona: request.guestPersona,
+    })
+    ]);
 
     const messages = data?.conversationHistory || [];
     const lastMessage =
@@ -134,6 +137,8 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
       guestResponse: lastMessage,
       status: data?.status || 'in_progress',
       feedback: data?.feedback,
+      lastMessageRating: currMessageRating?.rating,
+      lastMessageRatingReason: currMessageRating?.suggestions,
       
     }
 

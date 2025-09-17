@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { cn } from "@/app/lib/utils";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { ExtendedHumanMessageImpl } from "../contexts/TrainingContext";
 
 interface MessageAreaProps {
   messages: BaseMessage[];
@@ -12,7 +13,12 @@ interface MessageAreaProps {
 
 function MessageArea({ messages, className }: MessageAreaProps) {
   return (
-    <div className={cn("flex-1 overflow-y-auto scrollbar-hide p-3 sm:p-4 md:p-6", className)}>
+    <div
+      className={cn(
+        "flex-1 overflow-y-auto scrollbar-hide p-3 sm:p-4 md:p-6",
+        className
+      )}
+    >
       <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
         {messages.length === 0 ? (
           <EmptyState />
@@ -61,31 +67,112 @@ function MessageList({ messages }: { messages: BaseMessage[] }) {
 }
 
 function MessageBubble({ message }: { message: BaseMessage }) {
-  const isHuman = message instanceof HumanMessage;
+  const [showSuggestions, setShowSuggestions] = React.useState(false);
+
+  const isHuman =
+    message instanceof HumanMessage ||
+    message instanceof ExtendedHumanMessageImpl;
+  const rating =
+    message instanceof ExtendedHumanMessageImpl
+      ? message.messageRating?.Message_Rating.Rating
+      : undefined;
+  const listOfSuggestions =
+    message instanceof ExtendedHumanMessageImpl
+      ? message.messageSuggestions?.Alternative_Suggestions
+      : undefined;
+
+  // Rating color based on score
+  const getRatingColor = (rating: number) => {
+    if (rating >= 8) return "bg-green-100 text-green-800 border-green-200";
+    if (rating >= 6) return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    return "bg-red-100 text-red-800 border-red-200";
+  };
+
   return (
     <div
       className={cn("flex w-full", isHuman ? "justify-end" : "justify-start")}
     >
       <div
         className={cn(
-          "max-w-[85%] sm:max-w-[80%] md:max-w-[70%] rounded-lg px-3 sm:px-4 py-2 text-sm",
-          isHuman
-            ? "bg-primary text-primary-foreground ml-4 sm:ml-8 md:ml-12"
-            : "bg-muted text-muted-foreground mr-4 sm:mr-8 md:mr-12"
+          "flex flex-col gap-1.5",
+          isHuman ? "items-end" : "items-start"
         )}
       >
-        <div className="whitespace-pre-wrap break-words leading-relaxed">
-          {message.content.toString()}
+        {/* Main message bubble */}
+        <div
+          className={cn(
+            "max-w-[85%] sm:max-w-[80%] md:max-w-[70%] rounded-lg px-3 sm:px-4 py-2 text-sm",
+            isHuman
+              ? "bg-primary text-primary-foreground ml-4 sm:ml-8 md:ml-12"
+              : "bg-muted text-muted-foreground mr-4 sm:mr-8 md:mr-12"
+          )}
+        >
+          <div className="whitespace-pre-wrap break-words leading-relaxed">
+            {message.content.toString()}
+          </div>
         </div>
-        {/* <div className={cn(
-          "text-xs mt-1 opacity-70",
-          isHuman ? "text-primary-foreground/70" : "text-muted-foreground/70"
-        )}>
-          {message..toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          })}
-        </div> */}
+
+        {/* Rating and Suggestions Toggle - only for human messages */}
+        {isHuman &&
+          (rating || (listOfSuggestions && listOfSuggestions.length > 0)) && (
+            <div className="flex items-center gap-2">
+              {/* Rating display */}
+              {rating && (
+                <div
+                  className={cn(
+                    "text-xs px-2 py-1 rounded-full border font-medium flex items-center gap-1",
+                    getRatingColor(rating)
+                  )}
+                >
+                  <span className="text-xs">⭐</span>
+                  <span>{rating}/10</span>
+                </div>
+              )}
+
+              {/* Suggestions toggle button */}
+              {listOfSuggestions && listOfSuggestions.length > 0 && (
+                <button
+                  onClick={() => setShowSuggestions(!showSuggestions)}
+                  className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors flex items-center gap-1 font-medium"
+                >
+                  <span>💡</span>
+                  <span>{listOfSuggestions.length} suggestions</span>
+                  <span
+                    className={cn(
+                      "transition-transform",
+                      showSuggestions ? "rotate-180" : ""
+                    )}
+                  >
+                    ▼
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+
+        {/* Collapsible Suggestions */}
+        {isHuman &&
+          showSuggestions &&
+          listOfSuggestions &&
+          listOfSuggestions.length > 0 && (
+            <div className="w-full max-w-[85%] sm:max-w-[80%] md:max-w-[70%] animate-in slide-in-from-top-2 duration-200">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                <div className="text-xs font-medium text-blue-900 mb-2">
+                  Alternative responses:
+                </div>
+                <div className="space-y-2">
+                  {listOfSuggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      className="text-xs p-2 rounded bg-white border border-blue-100 text-blue-900 leading-relaxed hover:border-blue-300 transition-colors cursor-pointer"
+                    >
+                      {suggestion.Response}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );
