@@ -13,6 +13,7 @@ export { Skeleton } from "./skeleton"
 // Form components
 export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select"
 export { Textarea } from "./textarea"
+export { Label } from "./label"
 
 // Layout components
 export { Separator } from "./separator"

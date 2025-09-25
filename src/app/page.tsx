@@ -29,7 +29,11 @@ import {
   PersonaGeneratorSchema,
 } from "./lib/agents/v2/graph_v2";
 import { TrainingError, ErrorType, classifyError } from "./lib/error-handling";
-import { ExtendedHumanMessageImpl, TrainingProvider, trainingContext } from "./contexts/TrainingContext";
+import {
+  ExtendedHumanMessageImpl,
+  TrainingProvider,
+  trainingContext,
+} from "./contexts/TrainingContext";
 import { useAuth } from "./contexts/AuthContext";
 import { CoreAppDataContext } from "./contexts/CoreAppDataContext";
 import { getOrCreateUserByFirebaseUid } from "./lib/db/actions/user-actions";
@@ -40,6 +44,10 @@ import {
 import { createMessage } from "./lib/db/actions/message-actions";
 import { getMessagesByChatId } from "./lib/actions/message-actions";
 import type { UserThread } from "./lib/actions/user-threads-actions";
+import { Input } from "./components/ui/input";
+import { Label } from "./components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { Trash2, Plus } from "lucide-react";
 
 // Helper functions for error handling
 function isRetryableError(errorType: ErrorType): boolean {
@@ -90,46 +98,82 @@ function getContextualErrorMessage(
   }
 }
 
+interface SessionConfiguration {
+  id: string;
+  title: string;
+  scenario?: string;
+  persona?: string;
+}
+
 function ChatPage() {
-  const {
-    // State
-    messages,
-    isLoading,
-    trainingStarted,
-    trainingStatus,
-    sessionFeedback,
-    scenario,
-    persona,
-    customScenario,
-    customPersona,
-    isRefiningScenario,
-    isRefiningPersona,
-    errorMessage,
-    errorType,
-    lastFailedMessage,
-    panelWidth,
-    isResizing,
-    currentThreadId,
-    // Actions
-    setMessages,
-    setIsLoading,
-    setTrainingStarted,
-    setTrainingStatus,
-    setSessionFeedback,
-    setScenario,
-    setPersona,
-    setCustomScenario,
-    setCustomPersona,
-    setIsRefiningScenario,
-    setIsRefiningPersona,
-    setError,
-    clearError,
-    setLastFailedMessage,
-    setPanelWidth,
-    setIsResizing,
-    setCurrentThreadId,
-    resetSession,
-  } = useContext(trainingContext);
+  const trainingCtx = useContext(trainingContext);
+
+  // Get or create active training session
+  const activeTrainingState = trainingCtx.getActiveTrainingState();
+
+  // If no active session, create one
+  React.useEffect(() => {
+    if (!trainingCtx.activeTrainingId) {
+      const newId = trainingCtx.createTrainingState();
+      trainingCtx.setActiveTrainingId(newId);
+    }
+  }, [trainingCtx]);
+
+  // Helper functions to work with active session
+  const getActiveId = () => trainingCtx.activeTrainingId!;
+
+  // State getters (with fallbacks)
+  const messages = activeTrainingState?.messages || [];
+  const isLoading = activeTrainingState?.isLoading || false;
+  const trainingStarted = activeTrainingState?.trainingStarted || false;
+  const trainingStatus = activeTrainingState?.trainingStatus || "start";
+  const sessionFeedback = activeTrainingState?.sessionFeedback || null;
+  const scenario = activeTrainingState?.scenario || null;
+  const persona = activeTrainingState?.persona || null;
+  const customScenario = activeTrainingState?.customScenario || "";
+  const customPersona = activeTrainingState?.customPersona || "";
+  const isRefiningScenario = activeTrainingState?.isRefiningScenario || false;
+  const isRefiningPersona = activeTrainingState?.isRefiningPersona || false;
+  const errorMessage = activeTrainingState?.errorMessage || null;
+  const errorType = activeTrainingState?.errorType || null;
+  const lastFailedMessage = activeTrainingState?.lastFailedMessage || null;
+  const currentThreadId = activeTrainingState?.currentThreadId || null;
+  const panelWidth = trainingCtx.panelWidth;
+  const isResizing = trainingCtx.isResizing;
+
+  // Action wrappers
+  const setMessages = (messages: any[]) =>
+    trainingCtx.setMessages(getActiveId(), messages);
+  const setIsLoading = (loading: boolean) =>
+    trainingCtx.setIsLoading(getActiveId(), loading);
+  const setTrainingStarted = (started: boolean) =>
+    trainingCtx.setTrainingStarted(getActiveId(), started);
+  const setTrainingStatus = (status: any) =>
+    trainingCtx.setTrainingStatus(getActiveId(), status);
+  const setSessionFeedback = (feedback: any) =>
+    trainingCtx.setSessionFeedback(getActiveId(), feedback);
+  const setScenario = (scenario: any) =>
+    trainingCtx.setScenario(getActiveId(), scenario);
+  const setPersona = (persona: any) =>
+    trainingCtx.setPersona(getActiveId(), persona);
+  const setCustomScenario = (scenario: string) =>
+    trainingCtx.setCustomScenario(getActiveId(), scenario);
+  const setCustomPersona = (persona: string) =>
+    trainingCtx.setCustomPersona(getActiveId(), persona);
+  const setIsRefiningScenario = (refining: boolean) =>
+    trainingCtx.setIsRefiningScenario(getActiveId(), refining);
+  const setIsRefiningPersona = (refining: boolean) =>
+    trainingCtx.setIsRefiningPersona(getActiveId(), refining);
+  const setError = (message: string | null, type: any) =>
+    trainingCtx.setError(getActiveId(), message, type);
+  const clearError = () => trainingCtx.clearError(getActiveId());
+  const setLastFailedMessage = (message: string | null) =>
+    trainingCtx.setLastFailedMessage(getActiveId(), message);
+  const setPanelWidth = trainingCtx.setPanelWidth;
+  const setIsResizing = trainingCtx.setIsResizing;
+  const setCurrentThreadId = (threadId: string | null) =>
+    trainingCtx.setCurrentThreadId(getActiveId(), threadId);
+  const resetSession = () => trainingCtx.resetSession(getActiveId());
 
   // Get auth context for user information
   const authContext = useAuth();
@@ -146,6 +190,14 @@ function ChatPage() {
   const isSessionError = trainingStatus === "error";
   const isTrainingActive = trainingStarted && trainingStatus === "ongoing";
   const [isEndingTraining, setIsEndingTraining] = useState(false);
+
+  // Bulk session creation state
+  const [showBulkCreation, setShowBulkCreation] = useState(false);
+  const [sessionCount, setSessionCount] = useState(1);
+  const [sessionConfigurations, setSessionConfigurations] = useState<
+    SessionConfiguration[]
+  >([{ id: "1", title: "Session 1", scenario: "", persona: "" }]);
+  const [isCreatingBulkSessions, setIsCreatingBulkSessions] = useState(false);
 
   // Resize handlers
   const handleMouseDown = useCallback(
@@ -193,6 +245,236 @@ function ChatPage() {
       };
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
+
+  // Bulk session creation handlers
+  const handleSessionCountChange = (count: number) => {
+    setSessionCount(count);
+    const newConfigurations: SessionConfiguration[] = [];
+
+    for (let i = 1; i <= count; i++) {
+      const existingConfig = sessionConfigurations.find(
+        (config) => config.id === i.toString()
+      );
+      newConfigurations.push({
+        id: i.toString(),
+        title: existingConfig?.title || `Session ${i}`,
+        scenario: existingConfig?.scenario || "",
+        persona: existingConfig?.persona || "",
+      });
+    }
+
+    setSessionConfigurations(newConfigurations);
+  };
+
+  const handleConfigurationChange = (
+    id: string,
+    field: keyof SessionConfiguration,
+    value: string
+  ) => {
+    setSessionConfigurations((prev) =>
+      prev.map((config) =>
+        config.id === id ? { ...config, [field]: value } : config
+      )
+    );
+  };
+
+  const handleRemoveConfiguration = (id: string) => {
+    if (sessionConfigurations.length > 1) {
+      const newConfigs = sessionConfigurations.filter(
+        (config) => config.id !== id
+      );
+      setSessionConfigurations(newConfigs);
+      setSessionCount(newConfigs.length);
+    }
+  };
+
+  const handleAddConfiguration = () => {
+    const newId = (sessionConfigurations.length + 1).toString();
+    const newConfig: SessionConfiguration = {
+      id: newId,
+      title: `Session ${sessionConfigurations.length + 1}`,
+      scenario: "",
+      persona: "",
+    };
+    setSessionConfigurations((prev) => [...prev, newConfig]);
+    setSessionCount(sessionConfigurations.length + 1);
+  };
+
+  const handleStartAllSessions = async () => {
+    if (!authUser?.uid) {
+      setError(
+        "Please log in to create multiple training sessions.",
+        "validation"
+      );
+      return;
+    }
+
+    setIsCreatingBulkSessions(true);
+    try {
+      // Get or create database user
+      const dbUserResult = await getOrCreateUserByFirebaseUid(
+        authUser.uid,
+        authUser.email
+      );
+
+      if (!dbUserResult) {
+        throw new Error("Failed to create or retrieve user");
+      }
+
+      const createdThreads: UserThread[] = [];
+
+      // Create all sessions simultaneously
+      const sessionPromises = sessionConfigurations.map(async (config) => {
+        try {
+          const requestData: {
+            scenario?: ScenarioGeneratorSchema;
+            guestPersona?: PersonaGeneratorSchema;
+          } = {};
+
+          // Parse scenario if provided
+          if (config.scenario?.trim()) {
+            // Try to parse as JSON first, otherwise treat as plain text
+            try {
+              requestData.scenario = JSON.parse(config.scenario);
+            } catch {
+              // If not valid JSON, create a basic scenario object
+              requestData.scenario = {
+                scenario_title: config.title,
+                guest_situation: config.scenario,
+                difficulty_level: "Medium",
+                business_context: "",
+                constraints_and_policies: [],
+                expected_va_challenges: [],
+                success_criteria: [],
+              };
+            }
+          }
+
+          // Parse persona if provided
+          if (config.persona?.trim()) {
+            // Try to parse as JSON first, otherwise treat as plain text
+            try {
+              requestData.guestPersona = JSON.parse(config.persona);
+            } catch {
+              // If not valid JSON, create a basic persona object
+              requestData.guestPersona = {
+                name: "Guest",
+                demographics: config.persona,
+                personality_traits: [],
+                emotional_tone: "neutral",
+                communication_style: "professional",
+                expectations: [],
+                escalation_behavior: [],
+              };
+            }
+          }
+
+          // Start the training session
+          const result = await startTrainingSession(requestData);
+
+          if (result.error) {
+            throw new Error(result.error);
+          }
+
+          // Create thread in database
+          const newThread = await createThread({
+            title: config.title,
+            userId: dbUserResult.user.id,
+            visibility: "private",
+            scenario: result.scenario || {},
+            persona: result.guestPersona || {},
+            status: "active",
+            startedAt: new Date(),
+            version: "1",
+            score: null,
+            feedback: null,
+            completedAt: null,
+            deletedAt: null,
+          });
+
+          if (newThread) {
+            // Save initial AI message to database
+            const initialMessage = `${
+              (result.finalOutput as string) ||
+              "Training session started! You can now begin chatting with the guest."
+            }`;
+
+            await createMessage({
+              chatId: newThread.id,
+              role: "AI",
+              parts: [{ text: initialMessage }],
+              attachments: [],
+              isTraining: true,
+            });
+
+            // Create UserThread object for context
+            const userThread: UserThread = {
+              ...newThread,
+              isActive: true,
+              lastActivity: new Date(),
+            };
+
+            createdThreads.push(userThread);
+          }
+
+          return { success: true, thread: newThread, config };
+        } catch (error) {
+          console.error(`Error creating session "${config.title}":`, error);
+          return { success: false, error, config };
+        }
+      });
+
+      // Wait for all sessions to complete
+      const results = await Promise.all(sessionPromises);
+
+      // Update CoreAppDataContext with new threads
+      if (coreDispatch && createdThreads.length > 0) {
+        createdThreads.forEach((thread) => {
+          coreDispatch({ type: "ADD_USER_THREAD", payload: thread });
+        });
+      }
+
+      // Count successful and failed sessions
+      const successful = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).length;
+
+      if (successful > 0) {
+        // Reset bulk creation state
+        setShowBulkCreation(false);
+        setSessionCount(1);
+        setSessionConfigurations([
+          { id: "1", title: "Session 1", scenario: "", persona: "" },
+        ]);
+
+        // Show success message
+        const successMessage =
+          failed > 0
+            ? `Successfully created ${successful} sessions. ${failed} sessions failed to create.`
+            : `Successfully created all ${successful} training sessions!`;
+
+        // You might want to show this in a toast or notification
+        console.log(successMessage);
+      } else {
+        throw new Error("Failed to create any training sessions");
+      }
+    } catch (error) {
+      console.error("Error creating bulk sessions:", error);
+      const errorTypeClassified = classifyError(error);
+
+      if (error instanceof TrainingError) {
+        setError(error.message, errorTypeClassified);
+      } else if (error instanceof Error) {
+        setError(error.message, errorTypeClassified);
+      } else {
+        setError(
+          "Failed to create training sessions. Please try again.",
+          errorTypeClassified
+        );
+      }
+    } finally {
+      setIsCreatingBulkSessions(false);
+    }
+  };
 
   const handleStartTraining = async () => {
     setIsLoading(true);
@@ -290,7 +572,6 @@ function ChatPage() {
     } catch (error) {
       console.error("Error starting training session:", error);
       setTrainingStatus("error");
-
       // Classify and store error information
       const errorTypeClassified = classifyError(error);
 
@@ -336,7 +617,7 @@ function ChatPage() {
       const result = await updateTrainingSession({
         scenario,
         guestPersona: persona,
-messages: updatedMessages.map(msg => 
+        messages: updatedMessages.map((msg) =>
           msg instanceof ExtendedHumanMessageImpl ? msg.toHumanMessage() : msg
         ),
       });
@@ -373,19 +654,18 @@ messages: updatedMessages.map(msg =>
       );
 
       const newUpdatedMessage = new ExtendedHumanMessageImpl(
-        content,result.lastMessageRating,
-       result.lastMessageRatingReason
-        
-      )
+        content,
+        result.lastMessageRating,
+        result.lastMessageRatingReason
+      );
 
       console.log("New message created:", {
         content: newUpdatedMessage.content,
         type: newUpdatedMessage.getType(),
         rating: newUpdatedMessage.messageRating,
         ratingReason: newUpdatedMessage.messageRating,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
-      
 
       setMessages([...messages, newUpdatedMessage, guestMessage]);
 
@@ -821,8 +1101,8 @@ messages: updatedMessages.map(msg =>
   return (
     <div className="h-screen flex bg-background">
       {/* Left Sidebar */}
-      <LeftSidebar 
-        onThreadSelect={handleThreadSelect} 
+      <LeftSidebar
+        onThreadSelect={handleThreadSelect}
         selectedThreadId={currentThreadId}
       />
 
@@ -881,17 +1161,27 @@ messages: updatedMessages.map(msg =>
                     Customize your training using the panels on the right, or
                     leave them blank for AI-generated content.
                   </p>
-                  <Button
-                    onClick={() => {
-                      handleStartTraining();
-                    }}
-                    disabled={isLoading}
-                    size="lg"
-                  >
-                    {isLoading
-                      ? "Starting Training..."
-                      : "Start Training Session"}
-                  </Button>
+                  <div className="flex flex-col gap-3">
+                    <Button
+                      onClick={() => {
+                        handleStartTraining();
+                      }}
+                      disabled={isLoading}
+                      size="lg"
+                    >
+                      {isLoading
+                        ? "Starting Training..."
+                        : "Start Single Training Session"}
+                    </Button>
+                    <Button
+                      onClick={() => setShowBulkCreation(true)}
+                      disabled={isLoading}
+                      variant="outline"
+                      size="lg"
+                    >
+                      Create Multiple Sessions
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -935,6 +1225,185 @@ messages: updatedMessages.map(msg =>
               </div>
             )}
           </div>
+
+          {/* Bulk Session Creation Modal */}
+          {showBulkCreation && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-background rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                <div className="p-6 border-b">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-semibold">
+                      Create Multiple Training Sessions
+                    </h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowBulkCreation(false)}
+                      disabled={isCreatingBulkSessions}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+                  <div className="space-y-6">
+                    {/* Session Count Input */}
+                    <div className="space-y-2">
+                      <Label htmlFor="sessionCount">Number of Sessions</Label>
+                      <Input
+                        id="sessionCount"
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={sessionCount}
+                        onChange={(e) =>
+                          handleSessionCountChange(
+                            parseInt(e.target.value) || 1
+                          )
+                        }
+                        disabled={isCreatingBulkSessions}
+                      />
+                    </div>
+
+                    {/* Session Configurations */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-medium">
+                          Session Configurations
+                        </h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddConfiguration}
+                          disabled={isCreatingBulkSessions}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Session
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {sessionConfigurations.map((config, index) => (
+                          <Card key={config.id}>
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-base">
+                                  Session {index + 1}
+                                </CardTitle>
+                                {sessionConfigurations.length > 1 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleRemoveConfiguration(config.id)
+                                    }
+                                    disabled={isCreatingBulkSessions}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor={`title-${config.id}`}>
+                                  Session Title
+                                </Label>
+                                <Input
+                                  id={`title-${config.id}`}
+                                  value={config.title}
+                                  onChange={(e) =>
+                                    handleConfigurationChange(
+                                      config.id,
+                                      "title",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Enter session title"
+                                  disabled={isCreatingBulkSessions}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label htmlFor={`scenario-${config.id}`}>
+                                  Custom Scenario (Optional)
+                                </Label>
+                                <textarea
+                                  id={`scenario-${config.id}`}
+                                  className="w-full min-h-[80px] p-3 border border-input bg-background rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                  value={config.scenario}
+                                  onChange={(e) =>
+                                    handleConfigurationChange(
+                                      config.id,
+                                      "scenario",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Leave blank for AI-generated scenario or enter custom scenario details..."
+                                  disabled={isCreatingBulkSessions}
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label htmlFor={`persona-${config.id}`}>
+                                  Custom Persona (Optional)
+                                </Label>
+                                <textarea
+                                  id={`persona-${config.id}`}
+                                  className="w-full min-h-[80px] p-3 border border-input bg-background rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                  value={config.persona}
+                                  onChange={(e) =>
+                                    handleConfigurationChange(
+                                      config.id,
+                                      "persona",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="Leave blank for AI-generated persona or enter custom persona details..."
+                                  disabled={isCreatingBulkSessions}
+                                />
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 border-t bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {sessionConfigurations.length} session
+                      {sessionConfigurations.length !== 1 ? "s" : ""} will be
+                      created
+                    </p>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowBulkCreation(false)}
+                        disabled={isCreatingBulkSessions}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleStartAllSessions}
+                        disabled={
+                          isCreatingBulkSessions ||
+                          sessionConfigurations.length === 0
+                        }
+                      >
+                        {isCreatingBulkSessions
+                          ? "Creating Sessions..."
+                          : `Create All ${sessionConfigurations.length} Sessions`}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Resize Handle */}
           <div
