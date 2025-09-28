@@ -11,6 +11,7 @@ import * as z from "zod";
 import { customerLLM, feedbackLLM, personaLLM, scenarioLLM } from "./llms";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { alternativeSuggestionsPromptXML, customerSimulatorPromptJSON, customerSimulatorPromptXML, feedbackGeneratorPromptXML, messageRatingPromptXML, personaGeneratorPromptXML, scenarioGeneratorPromptXML } from "./prompts";
+import { DBMessage, Thread, ThreadGroup } from "../../db/schema";
 
 
 export const baseLLMSchema = z.object({}); // Empty by default
@@ -555,3 +556,84 @@ export const messageRatingWorkflow = new StateGraph(MessageRatingState)
   )
   .addEdge("provide_alternatives", END)
   .compile();
+
+
+//     // ================================================================
+//     // Multiple Session Feedback Flow
+//     // ================================================================
+
+
+// //
+// // 🧱 Feedback Workflow State
+// //
+// export const FeedbackOnlyState = Annotation.Root({
+//   group: Annotation<ThreadGroup>({
+//     reducer: (a, b) => a ?? b,
+//   }),
+//   threads: Annotation<Thread[]>({
+//     reducer: (a, b) => b ?? a,
+//     default: () => [],
+//   }),
+//   allMessages: Annotation<Record<string, DBMessage[]>>({
+//     reducer: (a, b) => b ?? a,
+//     default: () => ({}),
+//   }),
+//   groupFeedback: Annotation<any>(), // schema depends on your LLM output
+// });
+
+
+// export async function groupFeedbackAgent(state: any) {
+//   const { group, threads, allMessages } = state;
+
+//   const threadSummaries = threads.map(t => {
+//     const msgs = allMessages[t.id] ?? [];
+//     return `Thread: ${t.title}\nMessages:\n${msgs.map(m => `${m.role}: ${JSON.stringify(m.parts)}`).join("\n")}`;
+//   }).join("\n\n");
+
+//   const prompt = `
+// You're a training evaluator. You are given multiple training sessions belonging to the same group: "${group.groupName}".
+// For each thread, the trainee had conversations with the simulator. Generate an aggregated, structured feedback for the group, 
+// highlighting patterns, strengths, weaknesses, and scores.
+
+// Threads:
+// ${threadSummaries}
+
+// Return JSON in this shape:
+// {
+//   "summary": string,
+//   "strengths": string[],
+//   "weaknesses": string[],
+//   "recommendations": string[],
+//   "scores": {
+//     "communication": number,
+//     "empathy": number,
+//     "accuracy": number,
+//     "overall": number
+//   }
+// }
+// `;
+
+//   const response = await model.invoke(prompt);
+//   return JSON.parse(response.content);
+// }
+
+
+
+// export const groupFeedbackNode = async (
+//   state: StateType<typeof FeedbackOnlyState.spec>
+// ) => {
+//   console.log("📝 Generating group feedback for:", state.group.groupName);
+
+//   // Here you can do additional preprocessing, e.g. flattening messages.
+//   const summary = await groupFeedbackAgent(state);
+
+//   return {
+//     groupFeedback: summary,
+//   };
+// };
+
+// export const groupFeedbackWorkflow = new StateGraph(FeedbackOnlyState)
+//   .addNode("group_feedback", groupFeedbackNode)
+//   .addEdge(START, "group_feedback")
+//   .addEdge("group_feedback", END)
+//   .compile();

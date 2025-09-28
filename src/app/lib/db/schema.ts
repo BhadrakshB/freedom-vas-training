@@ -40,7 +40,7 @@ export const userAuth = pgTable("UserAuth", {
 export type UserAuth = InferSelectModel<typeof userAuth>;
 
 //
-// ➤ Thread Table (Conversation Thread)
+// Thread Table (Conversation Thread)
 //
 export const thread = pgTable("Thread", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
@@ -58,14 +58,14 @@ export const thread = pgTable("Thread", {
   completedAt: timestamp("completedAt"),
   version: text("version").default("1"),                // Schema versioning
   deletedAt: timestamp("deletedAt"),
-  groupId: uuid("groupId")
+  groupId: uuid("groupId").references(() => threadGroup.id),
 });
 
 export type Thread = InferSelectModel<typeof thread>;
 
 
 //
-// ➤ Messages Table
+// Messages Table
 //
 export const message = pgTable("Message", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
@@ -75,6 +75,22 @@ export const message = pgTable("Message", {
   attachments: json("attachments").notNull(),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   isTraining: boolean("isTraining").notNull().default(false),
+  messageRating: json("messageRating"),                  // Rating data for trainee messages
+  messageSuggestions: json("messageSuggestions"),        // Alternative suggestions for trainee messages
 });
 
 export type DBMessage = InferSelectModel<typeof message>;
+
+//
+// Thread Group Table
+//
+
+export const threadGroup = pgTable("ThreadGroup", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  groupName: text("groupName").notNull(),
+  groupFeedback: json("groupFeedback"), // Optional feedback for the group
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export type ThreadGroup = InferSelectModel<typeof threadGroup>;

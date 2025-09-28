@@ -10,6 +10,7 @@ export { ProtectedRoute } from './ProtectedRoute';
 // Sidebar Components
 export { LeftSidebar } from './LeftSidebar';
 export { UserThreadsList } from './UserThreadsList';
+export { ThreadGroupManager } from './ThreadGroupManager';
 
 // Chat Interface Components
 export { MessageArea, } from './MessageArea';

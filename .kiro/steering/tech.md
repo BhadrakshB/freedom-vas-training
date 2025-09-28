@@ -73,6 +73,6 @@ npx drizzle-kit studio      # Open Drizzle Studio
 ## Environment Variables
 - `NEXT_PUBLIC_FIREBASE_*` - Firebase client configuration
 - `FIREBASE_*` - Firebase admin configuration
-- `NEON_DATABASE_URL` - PostgreSQL connection string
+- `NEXT_PUBLIC_NEON_DATABASE_URL` - PostgreSQL connection string
 - `GOOGLE_API_KEY` - Google Gemini API key
 - `PINECONE_*` - Pinecone vector database configuration

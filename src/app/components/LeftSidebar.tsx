@@ -1,12 +1,20 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { Menu, X, ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import {
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { AuthStatus } from "./AuthStatus";
 import { UserThreadsList } from "./UserThreadsList";
+import { ThreadGroupManager } from "./ThreadGroupManager";
 import { useAuth } from "../contexts/AuthContext";
+import { useCoreAppData } from "../contexts/CoreAppDataContext";
 import type { UserThread } from "../lib/actions/user-threads-actions";
 
 interface LeftSidebarProps {
@@ -25,6 +33,11 @@ export function LeftSidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { state: authState } = useAuth();
+  const {
+    state: {
+      settings: { groupingEnabled },
+    },
+  } = useCoreAppData();
 
   const toggleCollapsed = useCallback(() => {
     setIsCollapsed((prev) => !prev);
@@ -78,10 +91,14 @@ export function LeftSidebar({
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className={cn(
-            "border-b border-border/30",
-            isCollapsed ? "flex flex-col items-center p-2 space-y-2" : "flex items-center justify-between p-3"
-          )}>
+          <div
+            className={cn(
+              "border-b border-border/30",
+              isCollapsed
+                ? "flex flex-col items-center p-2 space-y-2"
+                : "flex items-center justify-between p-3"
+            )}
+          >
             <Button
               variant="ghost"
               size="sm"
@@ -97,7 +114,9 @@ export function LeftSidebar({
               size="sm"
               className={cn(
                 "hidden lg:flex h-8 w-8 p-0",
-                isCollapsed ? "bg-primary hover:bg-primary/90 shadow-sm" : "ml-auto"
+                isCollapsed
+                  ? "bg-primary hover:bg-primary/90 shadow-sm"
+                  : "ml-auto"
               )}
               onClick={toggleCollapsed}
             >
@@ -110,13 +129,17 @@ export function LeftSidebar({
 
             {/* Collapsed state user avatar - right below ChevronRight */}
             {isCollapsed && authState.user && (
-              <div 
+              <div
                 className="hidden lg:flex cursor-pointer"
                 onClick={toggleCollapsed}
               >
                 <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
                   <span className="text-primary-foreground text-xs font-medium">
-                    {(authState.user?.displayName || authState.user?.email || "U")
+                    {(
+                      authState.user?.displayName ||
+                      authState.user?.email ||
+                      "U"
+                    )
                       .charAt(0)
                       .toUpperCase()}
                   </span>
@@ -148,18 +171,23 @@ export function LeftSidebar({
             {/* Auth Section */}
             <AuthStatus />
 
+            {/* Thread Group Manager */}
+            {authState.user && groupingEnabled && (
+              <div className="pb-2">
+                <ThreadGroupManager />
+              </div>
+            )}
+
             {/* Threads Section */}
             {authState.user && (
-              <UserThreadsList 
-                onThreadSelect={onThreadSelect} 
+              <UserThreadsList
+                onThreadSelect={onThreadSelect}
                 selectedThreadId={selectedThreadId}
               />
             )}
 
             {children}
           </div>
-
-
         </div>
       </aside>
     </>

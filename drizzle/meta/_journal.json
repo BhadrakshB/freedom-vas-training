@@ -8,6 +8,20 @@
       "when": 1757662772706,
       "tag": "0000_dry_franklin_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1759053654278,
+      "tag": "0001_keen_taskmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759058038717,
+      "tag": "0002_safe_namor",
+      "breakpoints": true
     }
   ]
 }

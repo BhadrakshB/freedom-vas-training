@@ -15,6 +15,10 @@ import {
   AlternativeSuggestionsSchema,
 } from "../lib/agents/v2/graph_v2";
 import { ErrorType } from "../lib/error-handling";
+import {
+  saveMessageWithFeedback,
+  updateMessageFeedback,
+} from "../lib/actions/training-actions";
 
 import { HumanMessage } from "@langchain/core/messages";
 
@@ -104,6 +108,18 @@ export interface TrainingActions {
     message: BaseMessage
   ) => void;
   removeMessage: (id: string, messageIndex: number) => void;
+  updateMessageWithFeedback: (
+    id: string,
+    messageIndex: number,
+    messageRating: MessageRatingSchema | null,
+    messageSuggestions: AlternativeSuggestionsSchema | null
+  ) => void;
+  saveMessageWithFeedbackToDb: (
+    id: string,
+    message: BaseMessage,
+    messageRating?: MessageRatingSchema | null,
+    messageSuggestions?: AlternativeSuggestionsSchema | null
+  ) => Promise<{ success: boolean; messageId?: string; error?: string }>;
 
   // Scenario & Persona Management
   setScenario: (id: string, scenario: ScenarioGeneratorSchema | null) => void;
@@ -204,6 +220,8 @@ export const trainingContext = createContext<TrainingContextType>({
   addMessage: () => {},
   updateMessage: () => {},
   removeMessage: () => {},
+  updateMessageWithFeedback: () => {},
+  saveMessageWithFeedbackToDb: async () => ({ success: false }),
   // Scenario & Persona Management
   setScenario: () => {},
   setPersona: () => {},
@@ -403,6 +421,84 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
       }));
     },
     [updateTrainingState]
+  );
+
+  const updateMessageWithFeedback = useCallback(
+    (
+      id: string,
+      messageIndex: number,
+      messageRating: MessageRatingSchema | null,
+      messageSuggestions: AlternativeSuggestionsSchema | null
+    ) => {
+      updateTrainingState(id, (state) => ({
+        ...state,
+        messages: state.messages.map((msg, index) => {
+          if (
+            index === messageIndex &&
+            msg instanceof ExtendedHumanMessageImpl
+          ) {
+            // Update the ExtendedHumanMessage with new rating and suggestions
+            const updatedMessage = new ExtendedHumanMessageImpl(
+              msg.content,
+              messageRating,
+              messageSuggestions
+            );
+            // Preserve other properties
+            updatedMessage.id = msg.id;
+            updatedMessage.additional_kwargs = msg.additional_kwargs;
+            updatedMessage.response_metadata = msg.response_metadata;
+            return updatedMessage;
+          }
+          return msg;
+        }),
+      }));
+    },
+    [updateTrainingState]
+  );
+
+  const saveMessageWithFeedbackToDb = useCallback(
+    async (
+      id: string,
+      message: BaseMessage,
+      messageRating?: MessageRatingSchema | null,
+      messageSuggestions?: AlternativeSuggestionsSchema | null
+    ): Promise<{ success: boolean; messageId?: string; error?: string }> => {
+      const trainingState = trainingStates.get(id);
+      if (!trainingState?.currentThreadId) {
+        return { success: false, error: "No active thread ID found" };
+      }
+
+      try {
+        // Determine role based on message type
+        const role = message.getType() === "human" ? "trainee" : "AI";
+
+        // Save message to database with feedback
+        const result = await saveMessageWithFeedback({
+          chatId: trainingState.currentThreadId,
+          role,
+          parts: message.content,
+          attachments: [],
+          isTraining: true,
+          messageRating: messageRating || undefined,
+          messageSuggestions: messageSuggestions || undefined,
+        });
+
+        if (result.success) {
+          console.log(`Message saved to database with ID: ${result.messageId}`);
+          return { success: true, messageId: result.messageId };
+        } else {
+          console.error("Failed to save message to database:", result.error);
+          return { success: false, error: result.error };
+        }
+      } catch (error) {
+        console.error("Error saving message to database:", error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        };
+      }
+    },
+    [trainingStates]
   );
 
   // Scenario & Persona Management
@@ -648,6 +744,8 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
       addMessage,
       updateMessage,
       removeMessage,
+      updateMessageWithFeedback,
+      saveMessageWithFeedbackToDb,
       // Scenario & Persona Management
       setScenario,
       setPersona,
@@ -700,6 +798,8 @@ export function TrainingProvider({ children }: { children: React.ReactNode }) {
       addMessage,
       updateMessage,
       removeMessage,
+      updateMessageWithFeedback,
+      saveMessageWithFeedbackToDb,
       setScenario,
       setPersona,
       setCustomScenario,
@@ -777,6 +877,28 @@ export function useTrainingActions(id: string | null) {
       updateMessage: (index: number, message: BaseMessage) =>
         context.updateMessage(id, index, message),
       removeMessage: (index: number) => context.removeMessage(id, index),
+      updateMessageWithFeedback: (
+        index: number,
+        messageRating: MessageRatingSchema | null,
+        messageSuggestions: AlternativeSuggestionsSchema | null
+      ) =>
+        context.updateMessageWithFeedback(
+          id,
+          index,
+          messageRating,
+          messageSuggestions
+        ),
+      saveMessageWithFeedbackToDb: (
+        message: BaseMessage,
+        messageRating?: MessageRatingSchema | null,
+        messageSuggestions?: AlternativeSuggestionsSchema | null
+      ) =>
+        context.saveMessageWithFeedbackToDb(
+          id,
+          message,
+          messageRating,
+          messageSuggestions
+        ),
       setScenario: (scenario: ScenarioGeneratorSchema | null) =>
         context.setScenario(id, scenario),
       setPersona: (persona: PersonaGeneratorSchema | null) =>

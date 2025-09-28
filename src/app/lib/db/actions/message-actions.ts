@@ -11,6 +11,17 @@ export async function createMessage(data: Omit<DBMessage, 'id' | 'createdAt'>) {
   return result;
 }
 
+// CREATE (message with rating and suggestions)
+export async function createMessageWithRatingAndSuggestions(
+  data: Omit<DBMessage, 'id' | 'createdAt' | 'messageRating' | 'messageSuggestions'> & {
+    messageRating?: any;
+    messageSuggestions?: any;
+  }
+) {
+  const [result] = await db.insert(message).values(data).returning();
+  return result;
+}
+
 // READ (fetch all messages)
 export async function getMessages() {
   return await db.select().from(message).orderBy(desc(message.createdAt));
@@ -109,6 +120,22 @@ export async function getTrainingMessageCount(chatId: string) {
 export async function updateMessage(id: string, data: Partial<Omit<DBMessage, 'id' | 'createdAt'>>) {
   const [result] = await db.update(message)
     .set(data)
+    .where(eq(message.id, id))
+    .returning();
+  return result;
+}
+
+// UPDATE (add rating and suggestions to message)
+export async function updateMessageRatingAndSuggestions(
+  id: string,
+  messageRating: any,
+  messageSuggestions: any
+) {
+  const [result] = await db.update(message)
+    .set({
+      messageRating,
+      messageSuggestions
+    })
     .where(eq(message.id, id))
     .returning();
   return result;
