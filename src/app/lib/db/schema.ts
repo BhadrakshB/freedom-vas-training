@@ -58,6 +58,7 @@ export const thread = pgTable("Thread", {
   completedAt: timestamp("completedAt"),
   version: text("version").default("1"),                // Schema versioning
   deletedAt: timestamp("deletedAt"),
+  groupId: uuid("groupId")
 });
 
 export type Thread = InferSelectModel<typeof thread>;
