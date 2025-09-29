@@ -19,6 +19,7 @@ import {
 } from "../lib/db/actions/thread-actions";
 import { createMessage } from "../lib/db/actions/message-actions";
 import { getMessagesByChatId } from "../lib/actions/message-actions";
+import { createThreadGroup } from "../lib/db/actions/thread-group-actions";
 import type { UserThread } from "../lib/actions/user-threads-actions";
 import {
     ScenarioGeneratorSchema,
@@ -374,8 +375,8 @@ export function useTrainingHandlers() {
                         parts: [{ text: content }],
                         attachments: [],
                         isTraining: true,
-                        messageRating: undefined,
-                        messageSuggestions: undefined
+                        messageRating: result.lastMessageRating,
+                        messageSuggestions: result.lastMessageRatingReason
                     });
 
                     // Save AI response
@@ -385,8 +386,8 @@ export function useTrainingHandlers() {
                         parts: [{ text: (result.guestResponse as string) || "" }],
                         attachments: [],
                         isTraining: true,
-                        messageRating: undefined,
-                        messageSuggestions: undefined
+                        messageRating: result.lastMessageRating,
+                        messageSuggestions: result.lastMessageRatingReason
                     });
 
                     // Update thread in CoreAppDataContext
@@ -741,7 +742,8 @@ export function useTrainingHandlers() {
     };
 
     const handleStartAllSessions = async (
-        sessionConfigurations: SessionConfiguration[]
+        sessionConfigurations: SessionConfiguration[],
+        groupName?: string
     ) => {
         if (!authUser?.uid) {
             setError(
@@ -750,6 +752,8 @@ export function useTrainingHandlers() {
             );
             return;
         }
+
+        setIsLoading(true);
 
         try {
             // Get or create database user
@@ -762,11 +766,33 @@ export function useTrainingHandlers() {
                 throw new Error("Failed to create or retrieve user");
             }
 
-            const createdThreads: UserThread[] = [];
+            // Step 1: Create thread group first to get the group ID
+            const defaultGroupName = groupName || `Training Group - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`;
+            const threadGroupResult = await createThreadGroup({
+                groupName: defaultGroupName,
+                groupFeedback: null,
+            });
 
-            // Create all sessions simultaneously
-            const sessionPromises = sessionConfigurations.map(async (config) => {
+            if (!threadGroupResult) {
+                throw new Error("Failed to create thread group");
+            }
+
+            console.log(`Created thread group: ${threadGroupResult.groupName} with ID: ${threadGroupResult.id}`);
+
+            const createdThreads: UserThread[] = [];
+            const sessionResults: Array<{
+                success: boolean;
+                thread?: any;
+                config: SessionConfiguration;
+                error?: any;
+            }> = [];
+
+            // Step 2: Create each training session individually (similar to handleStartTraining)
+            for (const config of sessionConfigurations) {
                 try {
+                    console.log(`Creating training session: ${config.title}`);
+
+                    // Prepare request data similar to handleStartTraining
                     const requestData: {
                         scenario?: ScenarioGeneratorSchema;
                         guestPersona?: PersonaGeneratorSchema;
@@ -774,7 +800,6 @@ export function useTrainingHandlers() {
 
                     // Parse scenario if provided
                     if (config.scenario?.trim()) {
-                        // Try to parse as JSON first, otherwise treat as plain text
                         try {
                             requestData.scenario = JSON.parse(config.scenario);
                         } catch {
@@ -793,7 +818,6 @@ export function useTrainingHandlers() {
 
                     // Parse persona if provided
                     if (config.persona?.trim()) {
-                        // Try to parse as JSON first, otherwise treat as plain text
                         try {
                             requestData.guestPersona = JSON.parse(config.persona);
                         } catch {
@@ -810,14 +834,19 @@ export function useTrainingHandlers() {
                         }
                     }
 
-                    // Start the training session
+                    // Start the training session (same as handleStartTraining)
                     const result = await startTrainingSession(requestData);
 
                     if (result.error) {
                         throw new Error(result.error);
                     }
 
-                    // Create thread in database
+                    // Create initial AI message
+                    const initialMessage = `${(result.finalOutput as string) ||
+                        "Training session started! You can now begin chatting with the guest."
+                        }`;
+
+                    // Step 3: Create thread in database with group ID
                     const newThread = await createThread({
                         title: config.title,
                         userId: dbUserResult.user.id,
@@ -831,83 +860,100 @@ export function useTrainingHandlers() {
                         feedback: null,
                         completedAt: null,
                         deletedAt: null,
-                        groupId: null,
+                        groupId: threadGroupResult.id, // Associate with the created group
                     });
 
-                    if (newThread) {
-                        // Save initial AI message to database
-                        const initialMessage = `${(result.finalOutput as string) ||
-                            "Training session started! You can now begin chatting with the guest."
-                            }`;
-
-                        await createMessage({
-                            chatId: newThread.id,
-                            role: "AI",
-                            parts: [{ text: initialMessage }],
-                            attachments: [],
-                            isTraining: true,
-                            messageRating: undefined,
-                            messageSuggestions: undefined
-                        });
-
-                        // Create UserThread object for context
-                        const userThread: UserThread = {
-                            ...newThread,
-                            isActive: true,
-                            lastActivity: new Date(),
-                        };
-
-                        createdThreads.push(userThread);
+                    if (!newThread) {
+                        throw new Error("Failed to create thread in database");
                     }
 
-                    return { success: true, thread: newThread, config };
+                    // Step 4: Save initial AI message to database
+                    await createMessage({
+                        chatId: newThread.id,
+                        role: "AI",
+                        parts: [{ text: initialMessage }],
+                        attachments: [],
+                        isTraining: true,
+                        messageRating: undefined,
+                        messageSuggestions: undefined
+                    });
+
+                    // Create UserThread object for context
+                    const userThread: UserThread = {
+                        ...newThread,
+                        isActive: true,
+                        lastActivity: new Date(),
+                    };
+
+                    createdThreads.push(userThread);
+                    sessionResults.push({ success: true, thread: newThread, config });
+
+                    console.log(`Successfully created session: ${config.title} with thread ID: ${newThread.id}`);
+
                 } catch (error) {
                     console.error(`Error creating session "${config.title}":`, error);
-                    return { success: false, error, config };
+                    sessionResults.push({ success: false, error, config });
                 }
-            });
+            }
 
-            // Wait for all sessions to complete
-            const results = await Promise.all(sessionPromises);
-
-            // Update CoreAppDataContext with new threads
+            // Step 5: Update CoreAppDataContext with new threads
             if (coreDispatch && createdThreads.length > 0) {
                 createdThreads.forEach((thread) => {
                     coreDispatch({ type: "ADD_USER_THREAD", payload: thread });
                 });
             }
 
-            // Count successful and failed sessions
-            const successful = results.filter((r) => r.success).length;
-            const failed = results.filter((r) => !r.success).length;
+            // Step 6: Provide feedback on results
+            const successful = sessionResults.filter((r) => r.success).length;
+            const failed = sessionResults.filter((r) => !r.success).length;
 
             if (successful > 0) {
-                // Show success message
-                const successMessage =
-                    failed > 0
-                        ? `Successfully created ${successful} sessions. ${failed} sessions failed to create.`
-                        : `Successfully created all ${successful} training sessions!`;
+                const successMessage = failed > 0
+                    ? `Successfully created ${successful} sessions in group "${threadGroupResult.groupName}". ${failed} sessions failed to create.`
+                    : `Successfully created all ${successful} training sessions in group "${threadGroupResult.groupName}"!`;
 
                 console.log(successMessage);
-                return { success: true, message: successMessage };
+
+                // Log details of failed sessions
+                if (failed > 0) {
+                    const failedSessions = sessionResults.filter((r) => !r.success);
+                    console.error("Failed sessions:", failedSessions.map(s => ({
+                        title: s.config.title,
+                        error: s.error?.message || "Unknown error"
+                    })));
+                }
+
+                return {
+                    success: true,
+                    message: successMessage,
+                    groupId: threadGroupResult.id,
+                    groupName: threadGroupResult.groupName,
+                    createdCount: successful,
+                    failedCount: failed
+                };
             } else {
                 throw new Error("Failed to create any training sessions");
             }
+
         } catch (error) {
             console.error("Error creating bulk sessions:", error);
             const errorTypeClassified = classifyError(error);
 
+            let errorMessage: string;
             if (error instanceof TrainingError) {
+                errorMessage = error.message;
                 setError(error.message, errorTypeClassified);
             } else if (error instanceof Error) {
+                errorMessage = error.message;
                 setError(error.message, errorTypeClassified);
             } else {
-                setError(
-                    "Failed to create training sessions. Please try again.",
-                    errorTypeClassified
-                );
+                errorMessage = "Failed to create training sessions. Please try again.";
+                setError(errorMessage, errorTypeClassified);
             }
-            return { success: false, error };
+
+            return { success: false, error: errorMessage };
+        } finally {
+            setIsLoading(false);
         }
     };
 

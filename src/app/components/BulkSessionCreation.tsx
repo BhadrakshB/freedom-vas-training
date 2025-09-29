@@ -14,10 +14,15 @@ export interface SessionConfiguration {
   persona?: string;
 }
 
+export interface BulkSessionGroup {
+  groupName: string;
+}
+
 interface BulkSessionCreationProps {
   show: boolean;
   sessionCount: number;
   sessionConfigurations: SessionConfiguration[];
+  groupName: string;
   isCreatingBulkSessions: boolean;
   onClose: () => void;
   onSessionCountChange: (count: number) => void;
@@ -28,6 +33,7 @@ interface BulkSessionCreationProps {
   ) => void;
   onRemoveConfiguration: (id: string) => void;
   onAddConfiguration: () => void;
+  onGroupNameChange: (groupName: string) => void;
   onStartAllSessions: () => void;
 }
 
@@ -35,12 +41,14 @@ export function BulkSessionCreation({
   show,
   sessionCount,
   sessionConfigurations,
+  groupName,
   isCreatingBulkSessions,
   onClose,
   onSessionCountChange,
   onConfigurationChange,
   onRemoveConfiguration,
   onAddConfiguration,
+  onGroupNameChange,
   onStartAllSessions,
 }: BulkSessionCreationProps) {
   if (!show) return null;
@@ -66,6 +74,23 @@ export function BulkSessionCreation({
 
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           <div className="space-y-6">
+            {/* Group Name Input */}
+            <div className="space-y-2">
+              <Label htmlFor="groupName">Group Name</Label>
+              <Input
+                id="groupName"
+                type="text"
+                value={groupName}
+                onChange={(e) => onGroupNameChange(e.target.value)}
+                placeholder="Enter a name for this training group"
+                disabled={isCreatingBulkSessions}
+              />
+              <p className="text-sm text-muted-foreground">
+                All sessions will be grouped together under this name for easy
+                organization.
+              </p>
+            </div>
+
             {/* Session Count Input */}
             <div className="space-y-2">
               <Label htmlFor="sessionCount">Number of Sessions</Label>

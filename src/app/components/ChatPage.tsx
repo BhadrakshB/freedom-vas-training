@@ -66,6 +66,7 @@ export function ChatPage() {
   const [sessionConfigurations, setSessionConfigurations] = useState<
     SessionConfiguration[]
   >([{ id: "1", title: "Session 1", scenario: "", persona: "" }]);
+  const [groupName, setGroupName] = useState("");
   const [isCreatingBulkSessions, setIsCreatingBulkSessions] = useState(false);
 
   // Add global mouse event listeners for resizing
@@ -139,10 +140,17 @@ export function ChatPage() {
     setSessionCount(sessionConfigurations.length + 1);
   };
 
+  const handleGroupNameChange = (name: string) => {
+    setGroupName(name);
+  };
+
   const handleBulkSessionStart = async () => {
     setIsCreatingBulkSessions(true);
     try {
-      const result = await handleStartAllSessions(sessionConfigurations);
+      const result = await handleStartAllSessions(
+        sessionConfigurations,
+        groupName
+      );
       if (result?.success) {
         // Reset bulk creation state
         setShowBulkCreation(false);
@@ -150,6 +158,7 @@ export function ChatPage() {
         setSessionConfigurations([
           { id: "1", title: "Session 1", scenario: "", persona: "" },
         ]);
+        setGroupName("");
       }
     } finally {
       setIsCreatingBulkSessions(false);
@@ -190,7 +199,14 @@ export function ChatPage() {
             {!trainingStarted ? (
               <TrainingStartScreen
                 onStartTraining={handleStartTraining}
-                onShowBulkCreation={() => setShowBulkCreation(true)}
+                onShowBulkCreation={() => {
+                  setShowBulkCreation(true);
+                  // Set default group name if empty
+                  if (!groupName) {
+                    const defaultName = `Training Group - ${new Date().toLocaleDateString()}`;
+                    setGroupName(defaultName);
+                  }
+                }}
                 isLoading={isLoading}
               />
             ) : (
@@ -215,12 +231,14 @@ export function ChatPage() {
             show={showBulkCreation}
             sessionCount={sessionCount}
             sessionConfigurations={sessionConfigurations}
+            groupName={groupName}
             isCreatingBulkSessions={isCreatingBulkSessions}
             onClose={() => setShowBulkCreation(false)}
             onSessionCountChange={handleSessionCountChange}
             onConfigurationChange={handleConfigurationChange}
             onRemoveConfiguration={handleRemoveConfiguration}
             onAddConfiguration={handleAddConfiguration}
+            onGroupNameChange={handleGroupNameChange}
             onStartAllSessions={handleBulkSessionStart}
           />
 
