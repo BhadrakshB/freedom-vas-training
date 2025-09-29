@@ -871,6 +871,8 @@ export function CoreAppDataProvider({
           parts: { content },
           attachments: [],
           isTraining,
+          messageRating: null,
+          messageSuggestions: null,
         });
 
         // Update thread's last activity
