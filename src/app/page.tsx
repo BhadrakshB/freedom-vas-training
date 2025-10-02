@@ -3,28 +3,22 @@
 import React, { useContext, useEffect } from "react";
 import { ChatPage } from "./components/ChatPage";
 import { ChatPageErrorBoundary } from "./components/ChatPageErrorBoundary";
-import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
+import {
+  CoreAppDataContext,
+  CoreAppDataProvider,
+} from "./contexts/CoreAppDataContext";
 
 function ChatPageWrapper() {
-  const trainingCtx = useContext(trainingContext);
-
-  // Get or create active training session
-  useEffect(() => {
-    if (!trainingCtx.activeTrainingId) {
-      const newId = trainingCtx.createTrainingState();
-      trainingCtx.setActiveTrainingId(newId);
-    }
-  }, [trainingCtx]);
+  const trainingCtx = useContext(CoreAppDataContext);
 
   return <ChatPage />;
 }
-
 export default function RootLayout() {
   return (
-    <TrainingProvider>
+    <CoreAppDataProvider>
       <div className="min-h-screen">
         <ChatPageWrapper />
       </div>
-    </TrainingProvider>
+    </CoreAppDataProvider>
   );
 }

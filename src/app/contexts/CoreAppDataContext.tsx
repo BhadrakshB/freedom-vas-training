@@ -21,6 +21,7 @@ import {
 import type { Thread, ThreadGroup, DBMessage } from "../lib/db/schema";
 import { ErrorType } from "../lib/error-handling";
 import {
+  AIMessage,
   BaseMessage,
   HumanMessage,
   isAIMessage,
@@ -1112,22 +1113,22 @@ export function CoreAppDataProvider({
       return;
     }
 
-    // Validate that we have either generated scenario/persona or custom ones
-    if (!state.scenario && !state.customScenario) {
-      setError(
-        "Please generate or provide a scenario before starting training",
-        "validation"
-      );
-      return;
-    }
+    // // Validate that we have either generated scenario/persona or custom ones
+    // if (!state.scenario && !state.customScenario) {
+    //   setError(
+    //     "Please generate or provide a scenario before starting training",
+    //     "validation"
+    //   );
+    //   return;
+    // }
 
-    if (!state.persona && !state.customPersona) {
-      setError(
-        "Please generate or provide a persona before starting training",
-        "validation"
-      );
-      return;
-    }
+    // if (!state.persona && !state.customPersona) {
+    //   setError(
+    //     "Please generate or provide a persona before starting training",
+    //     "validation"
+    //   );
+    //   return;
+    // }
 
     setLoading(true);
     setError(null, null);
@@ -1151,6 +1152,8 @@ export function CoreAppDataProvider({
         scenario: state.scenario,
         guestPersona: state.persona,
       });
+
+      console.log(`result: ${result}`);
 
       // Check if AI operation was successful before proceeding with database operations
       if (result.error) {
@@ -1183,19 +1186,31 @@ export function CoreAppDataProvider({
 
       // Save initial messages to database if any were generated
       const savedMessages: any[] = [];
-      if (result.messages && result.messages.length > 0) {
-        for (const message of result.messages) {
-          const savedMessage = await createMessage({
-            chatId: newThread.id,
-            role: !isAIMessage(message) ? "trainee" : "AI",
-            parts: { content: message.content },
-            attachments: [],
-            isTraining: true,
-            messageRating: null,
-            messageSuggestions: null,
-          });
-          savedMessages.push(savedMessage);
-        }
+      if (result.finalOutput && result.finalOutput.length > 0) {
+        console.log(
+          `Saving ${result.finalOutput.length} initial messages to database for thread ${newThread.id}`
+        );
+        const messageRole = "AI";
+        console.log(`messageRole: ${messageRole}`);
+        const contentStr = result.finalOutput;
+
+        console.log(`contentStr: ${contentStr}`);
+
+        const savedMessage = await createMessage({
+          chatId: newThread.id,
+          role: messageRole,
+          parts: { content: contentStr },
+          attachments: [],
+          isTraining: true,
+          messageRating: null,
+          messageSuggestions: null,
+        });
+        savedMessages.push(savedMessage);
+        console.log(
+          `Successfully saved message ${savedMessage.id} for thread ${newThread.id}`
+        );
+      } else {
+        console.log(`No initial messages to save for thread ${newThread.id}`);
       }
 
       // Update the state with the new thread

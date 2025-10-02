@@ -1,40 +1,136 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import { MessageArea } from "./MessageArea";
 import { MessageInput } from "./MessageInput";
 import { CompletionFooter, TrainingStatusIndicator } from "./";
-import type { BaseMessage } from "@langchain/core/messages";
+import { useCoreAppData } from "../contexts/CoreAppDataContext";
+import { BaseMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
 
-import type { TrainingStateType } from "../lib/agents/v2/graph_v2";
+export function TrainingChatArea() {
+  const {
+    state,
+    handleUpdateTraining,
+    handleEndTraining,
+    handleStartTraining,
+  } = useCoreAppData();
+  const [isEndingTraining, setIsEndingTraining] = useState(false);
 
-interface TrainingChatAreaProps {
-  messages: BaseMessage[];
-  trainingStatus: TrainingStateType;
-  isTrainingActive: boolean;
-  isSessionCompleted: boolean;
-  isSessionError: boolean;
-  isLoading: boolean;
-  isEndingTraining: boolean;
-  onSendMessage: (message: string) => void;
-  onEndTraining: () => void;
-  onStartNewSession: () => void;
-  onRetry?: () => void;
-}
+  // Get the active thread from userThreads using activeThreadId
+  const activeThread = useMemo(() => {
+    if (!state.activeThreadId) return null;
+    return state.userThreads.find(
+      (threadWithMessages) =>
+        threadWithMessages.thread.id === state.activeThreadId
+    );
+  }, [state.activeThreadId, state.userThreads]);
 
-export function TrainingChatArea({
-  messages,
-  trainingStatus,
-  isTrainingActive,
-  isSessionCompleted,
-  isSessionError,
-  isLoading,
-  isEndingTraining,
-  onSendMessage,
-  onEndTraining,
-  onStartNewSession,
-  onRetry,
-}: TrainingChatAreaProps) {
+  // Convert database messages to BaseMessage format
+  const messages = useMemo<BaseMessage[]>(() => {
+    if (!activeThread?.messages) return [];
+
+    return activeThread.messages.map((dbMessage) => {
+      const content =
+        typeof dbMessage.parts === "string"
+          ? dbMessage.parts
+          : (dbMessage.parts as any)?.content || "";
+
+      if (dbMessage.role === "trainee") {
+        return new HumanMessage(content);
+      } else {
+        return new AIMessage(content);
+      }
+    });
+  }, [activeThread?.messages]);
+
+  // Determine training status - map Thread status to TrainingStateType
+  const trainingStatus = useMemo<
+    "start" | "ongoing" | "completed" | "error" | "paused"
+  >(() => {
+    if (!activeThread) return "start";
+
+    const status = activeThread.thread.status;
+    if (status === "completed") return "completed";
+    if (status === "active") return "ongoing";
+    if (status === "paused") return "paused";
+    return "start";
+  }, [activeThread?.thread.status]);
+
+  const isTrainingActive = trainingStatus === "ongoing";
+  const isSessionCompleted = trainingStatus === "completed";
+  const isSessionError = state.errorType === "session";
+  const isLoading = state.isLoading;
+
+  // Handle sending a message
+  const handleSendMessage = useCallback(
+    async (message: string) => {
+      if (!activeThread || !message.trim()) return;
+
+      const scenario = activeThread.thread.scenario as any;
+      const persona = activeThread.thread.persona as any;
+
+      if (!scenario || !persona) {
+        console.error("Cannot send message: missing scenario or persona");
+        return;
+      }
+
+      await handleUpdateTraining(
+        activeThread.thread.id,
+        message.trim(),
+        scenario,
+        persona,
+        messages
+      );
+    },
+    [activeThread, messages, handleUpdateTraining]
+  );
+
+  // Handle ending training
+  const handleEndTrainingClick = useCallback(async () => {
+    if (!activeThread) return;
+
+    const scenario = activeThread.thread.scenario as any;
+    const persona = activeThread.thread.persona as any;
+
+    if (!scenario || !persona) {
+      console.error("Cannot end training: missing scenario or persona");
+      return;
+    }
+
+    setIsEndingTraining(true);
+    try {
+      await handleEndTraining(
+        activeThread.thread.id,
+        scenario,
+        persona,
+        messages
+      );
+    } finally {
+      setIsEndingTraining(false);
+    }
+  }, [activeThread, messages, handleEndTraining]);
+
+  // Handle starting a new session
+  const handleStartNewSession = useCallback(() => {
+    handleStartTraining();
+  }, [handleStartTraining]);
+
+  // Handle retry on error
+  const handleRetry = useCallback(() => {
+    // Clear error and allow user to try again
+    if (activeThread) {
+      handleStartTraining();
+    }
+  }, [activeThread, handleStartTraining]);
+
+  if (!activeThread) {
+    return (
+      <div className="h-full flex items-center justify-center text-muted-foreground">
+        No active training session
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Training Status Indicator for ongoing training */}
@@ -42,7 +138,7 @@ export function TrainingChatArea({
         <div className="flex justify-center p-2 border-b bg-background/95">
           <TrainingStatusIndicator
             status={trainingStatus}
-            onEndTraining={onEndTraining}
+            onEndTraining={handleEndTrainingClick}
             isEndingTraining={isEndingTraining}
           />
         </div>
@@ -58,12 +154,12 @@ export function TrainingChatArea({
         {isSessionCompleted || isSessionError ? (
           <CompletionFooter
             status={trainingStatus}
-            onStartNewSession={onStartNewSession}
-            onRetry={isSessionError ? onRetry : undefined}
+            onStartNewSession={handleStartNewSession}
+            onRetry={isSessionError ? handleRetry : undefined}
           />
         ) : (
           <MessageInput
-            onSendMessage={onSendMessage}
+            onSendMessage={handleSendMessage}
             placeholder="Type your message to the guest..."
             className="border-t-0"
             disabled={isLoading}

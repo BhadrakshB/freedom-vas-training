@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { cn } from "@/app/lib/utils";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
-import { ExtendedHumanMessageImpl } from "../contexts/TrainingContext";
+import { ExtendedHumanMessageImpl } from "../contexts/CoreAppDataContext";
 
 interface MessageAreaProps {
   messages: BaseMessage[];

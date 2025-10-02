@@ -1,19 +1,15 @@
 "use client";
 
-import React, { useEffect, useCallback, useMemo, useContext } from "react";
+import React, { useEffect } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LeftSidebar } from "./LeftSidebar";
 import { ErrorDisplay } from "./ErrorDisplay";
 import { TrainingStartScreen } from "./TrainingStartScreen";
 import { TrainingChatArea } from "./TrainingChatArea";
-import { TrainingPanels } from "./TrainingPanels";
 import { ResizeHandle } from "./ResizeHandle";
-import {
-  BulkSessionCreation,
-  SessionConfiguration,
-} from "./BulkSessionCreation";
 import { useResizePanel } from "../hooks/useResizePanel";
 import { useCoreAppData } from "../contexts/CoreAppDataContext";
+import { TrainingPanels } from "./TrainingPanels";
 
 export function ChatPage() {
   const resizePanel = useResizePanel();
@@ -75,41 +71,15 @@ export function ChatPage() {
             {state.activeThreadId == null ? (
               <TrainingStartScreen
                 onStartTraining={handleStartTraining}
-                onShowBulkCreation={handleShowBulkCreation}
-                isLoading={isLoading}
+                onShowBulkCreation={() => {
+                  console.log("Bulk creation not yet implemented");
+                }}
+                isLoading={state.isLoading}
               />
             ) : (
-              <TrainingChatArea
-                messages={messages}
-                trainingStatus={trainingStatus}
-                isTrainingActive={isTrainingActive}
-                isSessionCompleted={isSessionCompleted}
-                isSessionError={isSessionError}
-                isLoading={isLoading}
-                isEndingTraining={isEndingTraining}
-                onSendMessage={handleSendMessage}
-                onEndTraining={handleEndTraining}
-                onStartNewSession={handleStartNewSession}
-                onRetry={isSessionError ? handleRetry : undefined}
-              />
+              <TrainingChatArea />
             )}
           </div>
-
-          {/* Bulk Session Creation Modal */}
-          <BulkSessionCreation
-            show={showBulkCreation}
-            sessionCount={sessionCount}
-            sessionConfigurations={sessionConfigurations}
-            groupName={groupName}
-            isCreatingBulkSessions={isCreatingBulkSessions}
-            onClose={handleCloseBulkCreation}
-            onSessionCountChange={handleSessionCountChange}
-            onConfigurationChange={handleConfigurationChange}
-            onRemoveConfiguration={handleRemoveConfiguration}
-            onAddConfiguration={handleAddConfiguration}
-            onGroupNameChange={handleGroupNameChange}
-            onStartAllSessions={handleBulkSessionStart}
-          />
 
           {/* Resize Handle */}
           <ResizeHandle
@@ -123,7 +93,7 @@ export function ChatPage() {
             className="border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col"
             style={{ width: `${resizePanel.panelWidth}px` }}
           >
-            {/* <TrainingPanels {...trainingPanelsProps} /> */}
+            <TrainingPanels />
           </div>
         </main>
       </div>
