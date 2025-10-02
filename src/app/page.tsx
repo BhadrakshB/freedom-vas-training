@@ -2,6 +2,7 @@
 
 import React, { useContext, useEffect } from "react";
 import { ChatPage } from "./components/ChatPage";
+import { ChatPageErrorBoundary } from "./components/ChatPageErrorBoundary";
 import { TrainingProvider, trainingContext } from "./contexts/TrainingContext";
 
 function ChatPageWrapper() {

@@ -3,15 +3,12 @@
 import React, {
   createContext,
   useContext,
-  useReducer,
   useCallback,
   useEffect,
+  useState,
 } from "react";
 import { useAuth } from "./AuthContext";
-import {
-  getUserThreadsByFirebaseUid,
-  type UserThread,
-} from "../lib/actions/user-threads-actions";
+import { getUserThreadsByFirebaseUid } from "../lib/actions/user-threads-actions";
 import { createThread, updateThread } from "../lib/db/actions/thread-actions";
 import { createMessage } from "../lib/db/actions/message-actions";
 import {
@@ -21,42 +18,28 @@ import {
   deleteThreadGroup,
   getThreadGroupsWithCounts,
 } from "../lib/db/actions/thread-group-actions";
-import type { ThreadGroup } from "../lib/db/schema";
-
-// Types for the core app data
-interface Training {
-  id: string;
-  title: string;
-  scenario: string;
-  status: "active" | "completed" | "paused";
-  createdAt: Date;
-  updatedAt: Date;
-  score?: number;
-  feedback?: string;
-  sessionData?: any;
-}
-
-// Extended ThreadGroup type with additional UI properties
-interface ThreadGroupWithThreads extends ThreadGroup {
-  threads: UserThread[];
-  threadCount: number;
-  isExpanded?: boolean;
-}
-
-interface Thread {
-  id: string;
-  trainingId?: string;
-  title: string;
-  messages: Array<{
-    id: string;
-    role: "user" | "assistant" | "system";
-    content: string;
-    timestamp: Date;
-  }>;
-  createdAt: Date;
-  updatedAt: Date;
-  isActive: boolean;
-}
+import type { Thread, ThreadGroup, DBMessage } from "../lib/db/schema";
+import { ErrorType } from "../lib/error-handling";
+import {
+  BaseMessage,
+  HumanMessage,
+  isAIMessage,
+} from "@langchain/core/messages";
+import {
+  AlternativeSuggestionsSchema,
+  FeedbackSchema,
+  MessageRatingSchema,
+  PersonaGeneratorSchema,
+  ScenarioGeneratorSchema,
+  TrainingStateType,
+} from "../lib/agents/v2/graph_v2";
+import {
+  startTrainingSession,
+  updateTrainingSession,
+  endTrainingSession,
+  refineScenario,
+  refinePersona,
+} from "../lib/actions/training-actions";
 
 interface UserProfile {
   id: string;
@@ -70,28 +53,105 @@ interface UserProfile {
   };
 }
 
+export interface ExtendedHumanMessage extends HumanMessage {
+  messageRating: MessageRatingSchema | null;
+  messageSuggestions: AlternativeSuggestionsSchema | null;
+
+  toHumanMessage(): HumanMessage;
+}
+
+export class ExtendedHumanMessageImpl
+  extends HumanMessage
+  implements ExtendedHumanMessage
+{
+  messageRating: MessageRatingSchema | null;
+  messageSuggestions: AlternativeSuggestionsSchema | null;
+
+  constructor(
+    content: string | any,
+    messageRating: MessageRatingSchema | null = null,
+    messageSuggestions: AlternativeSuggestionsSchema | null = null
+  ) {
+    super(content);
+    this.messageRating = messageRating;
+    this.messageSuggestions = messageSuggestions;
+  }
+
+  toHumanMessage(): HumanMessage {
+    // Create a new HumanMessage with the same content and properties
+    const humanMessage = new HumanMessage({
+      content: this.content,
+      additional_kwargs: this.additional_kwargs,
+      response_metadata: this.response_metadata,
+      id: this.id,
+    });
+    return humanMessage;
+  }
+}
+
+export interface ThreadState {
+  id: string;
+  name: string; // User-friendly name for the session
+  messages: BaseMessage[];
+  scenario: ScenarioGeneratorSchema | null;
+  persona: PersonaGeneratorSchema | null;
+  customScenario: string;
+  customPersona: string;
+  isRefiningScenario: boolean;
+  isRefiningPersona: boolean;
+  errorMessage: string | null;
+  errorType: ErrorType | null;
+  sessionFeedback: FeedbackSchema | null;
+  isLoading: boolean;
+  trainingStarted: boolean;
+  trainingStatus: TrainingStateType;
+  lastFailedMessage: string | null;
+  currentThreadId: string | null;
+  createdAt: Date;
+  lastActivity: Date;
+  isArchived: boolean;
+}
+
+export interface ThreadWithMessages {
+  thread: Thread;
+  messages: DBMessage[] | null;
+}
+
+export interface ThreadGroupWithThreads {
+  threadGroup: ThreadGroup;
+  threads: ThreadWithMessages[];
+  isExpanded: boolean;
+}
+
 interface CoreAppState {
   // User data
   userProfile: UserProfile | null;
 
-  // Training data
-  trainings: Training[];
-  activeTraining: Training | null;
-
   // Thread/chat data (from database)
-  userThreads: UserThread[];
-  threads: Thread[];
-  activeThread: Thread | null;
+  userThreads: ThreadWithMessages[];
+  activeThreadId: string | null;
 
   // Thread groups data
-  threadGroups: ThreadGroup[];
-  threadGroupsWithThreads: ThreadGroupWithThreads[];
+  threadGroups: ThreadGroupWithThreads[];
+  activeThreadGroupId: string | null;
   isLoadingGroups: boolean;
 
   // UI state
   isLoading: boolean;
   isLoadingThreads: boolean;
   error: string | null;
+  errorType: ErrorType | null;
+  scenario?: ScenarioGeneratorSchema;
+  persona?: PersonaGeneratorSchema;
+  customScenario: string | null;
+  customPersona: string | null;
+  isRefiningScenario: boolean;
+  isRefiningPersona: boolean;
+
+  // Settings
+  settings: {
+    autoSaveInterval: number;
+  };
 
   // Statistics
   threadStats: {
@@ -100,366 +160,53 @@ interface CoreAppState {
     completed: number;
     paused: number;
   };
-
-  // App settings
-  settings: {
-    autoSaveInterval: number;
-    maxThreads: number;
-    debugMode: boolean;
-    groupingEnabled: boolean;
-  };
 }
-
-// Action types
-type CoreAppAction =
-  | { type: "SET_USER_PROFILE"; payload: UserProfile }
-  | { type: "SET_LOADING"; payload: boolean }
-  | { type: "SET_LOADING_THREADS"; payload: boolean }
-  | { type: "SET_LOADING_GROUPS"; payload: boolean }
-  | { type: "SET_ERROR"; payload: string | null }
-
-  // Training actions
-  | { type: "ADD_TRAINING"; payload: Training }
-  | {
-      type: "UPDATE_TRAINING";
-      payload: { id: string; updates: Partial<Training> };
-    }
-  | { type: "DELETE_TRAINING"; payload: string }
-  | { type: "SET_ACTIVE_TRAINING"; payload: Training | null }
-  | { type: "SET_TRAININGS"; payload: Training[] }
-
-  // User threads actions (from database)
-  | {
-      type: "SET_USER_THREADS";
-      payload: { threads: UserThread[]; stats: CoreAppState["threadStats"] };
-    }
-  | { type: "ADD_USER_THREAD"; payload: UserThread }
-  | {
-      type: "UPDATE_USER_THREAD";
-      payload: { id: string; updates: Partial<UserThread> };
-    }
-  | { type: "CLEAR_USER_THREADS" }
-
-  // Thread group actions
-  | { type: "SET_THREAD_GROUPS"; payload: ThreadGroup[] }
-  | { type: "ADD_THREAD_GROUP"; payload: ThreadGroup }
-  | {
-      type: "UPDATE_THREAD_GROUP";
-      payload: { id: string; updates: Partial<ThreadGroup> };
-    }
-  | { type: "DELETE_THREAD_GROUP"; payload: string }
-  | {
-      type: "SET_THREAD_GROUPS_WITH_THREADS";
-      payload: ThreadGroupWithThreads[];
-    }
-  | {
-      type: "TOGGLE_GROUP_EXPANSION";
-      payload: { groupId: string; isExpanded: boolean };
-    }
-
-  // Thread actions (UI state)
-  | { type: "ADD_THREAD"; payload: Thread }
-  | { type: "UPDATE_THREAD"; payload: { id: string; updates: Partial<Thread> } }
-  | { type: "DELETE_THREAD"; payload: string }
-  | { type: "SET_ACTIVE_THREAD"; payload: Thread | null }
-  | { type: "SET_THREADS"; payload: Thread[] }
-  | {
-      type: "ADD_MESSAGE_TO_THREAD";
-      payload: { threadId: string; message: Thread["messages"][0] };
-    }
-
-  // Settings actions
-  | { type: "UPDATE_SETTINGS"; payload: Partial<CoreAppState["settings"]> }
-  | {
-      type: "UPDATE_USER_PREFERENCES";
-      payload: Partial<UserProfile["preferences"]>;
-    };
 
 // Initial state
 const initialState: CoreAppState = {
+  // User data
   userProfile: null,
-  trainings: [],
-  activeTraining: null,
+
+  // Thread/chat data (from database)
   userThreads: [],
-  threads: [],
-  activeThread: null,
+  activeThreadId: null,
+
+  // Thread groups data
   threadGroups: [],
-  threadGroupsWithThreads: [],
+  activeThreadGroupId: null,
   isLoadingGroups: false,
+
+  // UI state
   isLoading: false,
   isLoadingThreads: false,
   error: null,
+  errorType: null,
+
+  // Training Data
+  scenario: undefined,
+  persona: undefined,
+  customScenario: null,
+  customPersona: null,
+  isRefiningScenario: false,
+  isRefiningPersona: false,
+
+  // Settings
+  settings: {
+    autoSaveInterval: 0,
+  },
+
+  // Statistics
   threadStats: {
     total: 0,
     active: 0,
     completed: 0,
     paused: 0,
   },
-  settings: {
-    autoSaveInterval: 30000, // 30 seconds
-    maxThreads: 50,
-    debugMode: false,
-    groupingEnabled: true,
-  },
 };
 
-// Reducer function
-function coreAppReducer(
-  state: CoreAppState,
-  action: CoreAppAction
-): CoreAppState {
-  switch (action.type) {
-    case "SET_USER_PROFILE":
-      return { ...state, userProfile: action.payload };
-
-    case "SET_LOADING":
-      return { ...state, isLoading: action.payload };
-
-    case "SET_LOADING_THREADS":
-      return { ...state, isLoadingThreads: action.payload };
-
-    case "SET_LOADING_GROUPS":
-      return { ...state, isLoadingGroups: action.payload };
-
-    case "SET_ERROR":
-      return { ...state, error: action.payload };
-
-    // User threads actions
-    case "SET_USER_THREADS":
-      return {
-        ...state,
-        userThreads: action.payload.threads,
-        threadStats: action.payload.stats,
-      };
-
-    case "ADD_USER_THREAD":
-      const newThreads = [...state.userThreads, action.payload];
-      return {
-        ...state,
-        userThreads: newThreads,
-        threadStats: {
-          total: newThreads.length,
-          active: newThreads.filter((t) => t.status === "active").length,
-          completed: newThreads.filter((t) => t.status === "completed").length,
-          paused: newThreads.filter((t) => t.status === "paused").length,
-        },
-      };
-
-    case "UPDATE_USER_THREAD":
-      const updatedThreads = state.userThreads.map((thread) =>
-        thread.id === action.payload.id
-          ? { ...thread, ...action.payload.updates, updatedAt: new Date() }
-          : thread
-      );
-      return {
-        ...state,
-        userThreads: updatedThreads,
-        threadStats: {
-          total: updatedThreads.length,
-          active: updatedThreads.filter((t) => t.status === "active").length,
-          completed: updatedThreads.filter((t) => t.status === "completed")
-            .length,
-          paused: updatedThreads.filter((t) => t.status === "paused").length,
-        },
-      };
-
-    case "CLEAR_USER_THREADS":
-      return {
-        ...state,
-        userThreads: [],
-        threadStats: { total: 0, active: 0, completed: 0, paused: 0 },
-        threadGroupsWithThreads: [], // Clear grouped threads as well
-      };
-
-    // Thread group actions
-    case "SET_THREAD_GROUPS":
-      return { ...state, threadGroups: action.payload };
-
-    case "ADD_THREAD_GROUP":
-      return {
-        ...state,
-        threadGroups: [...state.threadGroups, action.payload],
-      };
-
-    case "UPDATE_THREAD_GROUP":
-      return {
-        ...state,
-        threadGroups: state.threadGroups.map((group) =>
-          group.id === action.payload.id
-            ? { ...group, ...action.payload.updates, updatedAt: new Date() }
-            : group
-        ),
-        threadGroupsWithThreads: state.threadGroupsWithThreads.map((group) =>
-          group.id === action.payload.id
-            ? { ...group, ...action.payload.updates, updatedAt: new Date() }
-            : group
-        ),
-      };
-
-    case "DELETE_THREAD_GROUP":
-      return {
-        ...state,
-        threadGroups: state.threadGroups.filter(
-          (group) => group.id !== action.payload
-        ),
-        threadGroupsWithThreads: state.threadGroupsWithThreads.filter(
-          (group) => group.id !== action.payload
-        ),
-      };
-
-    case "SET_THREAD_GROUPS_WITH_THREADS":
-      return {
-        ...state,
-        threadGroupsWithThreads: action.payload,
-      };
-
-    case "TOGGLE_GROUP_EXPANSION":
-      return {
-        ...state,
-        threadGroupsWithThreads: state.threadGroupsWithThreads.map((group) =>
-          group.id === action.payload.groupId
-            ? { ...group, isExpanded: action.payload.isExpanded }
-            : group
-        ),
-      };
-
-    // Training actions
-    case "ADD_TRAINING":
-      return {
-        ...state,
-        trainings: [...state.trainings, action.payload],
-      };
-
-    case "UPDATE_TRAINING":
-      return {
-        ...state,
-        trainings: state.trainings.map((training) =>
-          training.id === action.payload.id
-            ? { ...training, ...action.payload.updates, updatedAt: new Date() }
-            : training
-        ),
-        activeTraining:
-          state.activeTraining?.id === action.payload.id
-            ? {
-                ...state.activeTraining,
-                ...action.payload.updates,
-                updatedAt: new Date(),
-              }
-            : state.activeTraining,
-      };
-
-    case "DELETE_TRAINING":
-      return {
-        ...state,
-        trainings: state.trainings.filter(
-          (training) => training.id !== action.payload
-        ),
-        activeTraining:
-          state.activeTraining?.id === action.payload
-            ? null
-            : state.activeTraining,
-      };
-
-    case "SET_ACTIVE_TRAINING":
-      return { ...state, activeTraining: action.payload };
-
-    case "SET_TRAININGS":
-      return { ...state, trainings: action.payload };
-
-    // Thread actions
-    case "ADD_THREAD":
-      return {
-        ...state,
-        threads: [...state.threads, action.payload],
-      };
-
-    case "UPDATE_THREAD":
-      return {
-        ...state,
-        threads: state.threads.map((thread) =>
-          thread.id === action.payload.id
-            ? { ...thread, ...action.payload.updates, updatedAt: new Date() }
-            : thread
-        ),
-        activeThread:
-          state.activeThread?.id === action.payload.id
-            ? {
-                ...state.activeThread,
-                ...action.payload.updates,
-                updatedAt: new Date(),
-              }
-            : state.activeThread,
-      };
-
-    case "DELETE_THREAD":
-      return {
-        ...state,
-        threads: state.threads.filter((thread) => thread.id !== action.payload),
-        activeThread:
-          state.activeThread?.id === action.payload ? null : state.activeThread,
-      };
-
-    case "SET_ACTIVE_THREAD":
-      return { ...state, activeThread: action.payload };
-
-    case "SET_THREADS":
-      return { ...state, threads: action.payload };
-
-    case "ADD_MESSAGE_TO_THREAD":
-      return {
-        ...state,
-        threads: state.threads.map((thread) =>
-          thread.id === action.payload.threadId
-            ? {
-                ...thread,
-                messages: [...thread.messages, action.payload.message],
-                updatedAt: new Date(),
-              }
-            : thread
-        ),
-        activeThread:
-          state.activeThread?.id === action.payload.threadId
-            ? {
-                ...state.activeThread,
-                messages: [
-                  ...state.activeThread.messages,
-                  action.payload.message,
-                ],
-                updatedAt: new Date(),
-              }
-            : state.activeThread,
-      };
-
-    // Settings actions
-    case "UPDATE_SETTINGS":
-      return {
-        ...state,
-        settings: { ...state.settings, ...action.payload },
-      };
-
-    case "UPDATE_USER_PREFERENCES":
-      return {
-        ...state,
-        userProfile: state.userProfile
-          ? {
-              ...state.userProfile,
-              preferences: {
-                ...state.userProfile.preferences,
-                ...action.payload,
-              },
-            }
-          : null,
-      };
-
-    default:
-      return state;
-  }
-}
-
 // Context interface
-interface CoreAppContextType {
+export interface CoreAppContextType {
   state: CoreAppState;
-  dispatch: React.Dispatch<CoreAppAction>;
 
   // User actions
   setUserProfile: (profile: UserProfile) => void;
@@ -491,7 +238,7 @@ interface CoreAppContextType {
     scenario: any,
     persona: any,
     groupId?: string | null
-  ) => Promise<UserThread>;
+  ) => Promise<ThreadWithMessages>;
   addMessageToTrainingSession: (
     threadId: string,
     content: string,
@@ -503,35 +250,50 @@ interface CoreAppContextType {
     score: any,
     feedback: any
   ) => Promise<void>;
-  selectUserThread: (thread: UserThread) => void;
-
-  // Training actions
-  addTraining: (training: Training) => void;
-  updateTraining: (id: string, updates: Partial<Training>) => void;
-  deleteTraining: (id: string) => void;
-  setActiveTraining: (training: Training | null) => void;
+  selectUserThread: (thread: ThreadWithMessages) => void;
 
   // Thread actions (UI state)
   addThread: (thread: Thread) => void;
   updateThread: (id: string, updates: Partial<Thread>) => void;
   deleteThread: (id: string) => void;
   setActiveThread: (thread: Thread | null) => void;
-  addMessageToThread: (
-    threadId: string,
-    message: Thread["messages"][0]
-  ) => void;
+
+  // Scenario and Persona actions
+  setScenario: (scenario: ScenarioGeneratorSchema | null) => void;
+  setPersona: (persona: PersonaGeneratorSchema | null) => void;
+  setCustomScenario: (customScenario: string | null) => void;
+  setCustomPersona: (customPersona: string | null) => void;
+  setIsRefiningScenario: (isRefining: boolean) => void;
+  setIsRefiningPersona: (isRefining: boolean) => void;
 
   // Utility actions
   setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  updateSettings: (settings: Partial<CoreAppState["settings"]>) => void;
+  setError: (error: string | null, errorType: ErrorType | null) => void;
+  setActiveThreadId: (id: string | null) => void;
 
   // Computed properties
-  activeTrainingThreads: Thread[];
-  completedTrainings: Training[];
-  recentThreads: Thread[];
-  ungroupedThreads: UserThread[];
+  activeTrainingThreads: ThreadWithMessages[];
+  recentThreads: ThreadWithMessages[];
+  ungroupedThreads: ThreadWithMessages[];
   groupedThreads: ThreadGroupWithThreads[];
+
+  // New Training Functions
+  handleStartTraining: () => void;
+  handleUpdateTraining: (
+    threadId: string,
+    userMessage: string,
+    scenario: ScenarioGeneratorSchema,
+    persona: PersonaGeneratorSchema,
+    conversationHistory: BaseMessage[]
+  ) => Promise<void>;
+  handleEndTraining: (
+    threadId: string,
+    scenario: ScenarioGeneratorSchema,
+    persona: PersonaGeneratorSchema,
+    conversationHistory: BaseMessage[]
+  ) => Promise<void>;
+  handleRefineScenario: (customScenario: string) => Promise<void>;
+  handleRefinePersona: (customPersona: string) => Promise<void>;
 }
 
 // Create context
@@ -546,89 +308,166 @@ export function CoreAppDataProvider({
   children: React.ReactNode;
 }) {
   const { state: authState } = useAuth();
-  const [state, dispatch] = useReducer(coreAppReducer, initialState);
+  const [state, setState] = useState(initialState);
 
   // Load user threads and groups when user authenticates/deauthenticates
   useEffect(() => {
     if (authState.user?.uid) {
       loadUserThreads();
-      if (state.settings.groupingEnabled) {
-        loadThreadGroups();
-      }
+      loadThreadGroups();
     } else {
-      dispatch({ type: "CLEAR_USER_THREADS" });
-      dispatch({ type: "SET_THREAD_GROUPS", payload: [] });
+      // dispatch({ type: "CLEAR_USER_THREADS" });
+
+      // dispatch({ type: "SET_THREAD_GROUPS", payload: [] });
+      setState((prevState) => ({
+        ...prevState,
+
+        threadGroups: [],
+        userThreads: [],
+        threadStats: {
+          total: 0,
+          active: 0,
+          completed: 0,
+          paused: 0,
+        },
+      }));
     }
-  }, [authState.user?.uid, state.settings.groupingEnabled]);
+  }, [authState.user?.uid]);
 
   // Load user threads from database
   const loadUserThreads = useCallback(async () => {
     if (!authState.user?.uid) {
-      dispatch({ type: "CLEAR_USER_THREADS" });
+      // dispatch({ type: "CLEAR_USER_THREADS" });
+      setState((prevState) => ({
+        ...prevState,
+        userThreads: [],
+        threadStats: {
+          total: 0,
+          active: 0,
+          completed: 0,
+          paused: 0,
+        },
+      }));
       return;
     }
 
-    dispatch({ type: "SET_LOADING_THREADS", payload: true });
-    dispatch({ type: "SET_ERROR", payload: null });
+    // dispatch({ type: "SET_LOADING_THREADS", payload: true });
+    // dispatch({ type: "SET_ERROR", payload: null });
+    setState((prevState) => ({
+      ...prevState,
+      isLoadingThreads: true,
+      error: null,
+    }));
 
     try {
       const result = await getUserThreadsByFirebaseUid(authState.user.uid);
 
       if (result.success) {
-        dispatch({
-          type: "SET_USER_THREADS",
-          payload: {
-            threads: result.threads,
-            stats: {
-              total: result.totalCount,
-              active: result.activeCount,
-              completed: result.completedCount,
-              paused:
-                result.totalCount - result.activeCount - result.completedCount,
-            },
+        // dispatch({
+        //   type: "SET_USER_THREADS",
+        //   payload: {
+        //     threads: result.threads,
+        //     stats: {
+        //       total: result.totalCount,
+        //       active: result.activeCount,
+        //       completed: result.completedCount,
+        //       paused:
+        //         result.totalCount - result.activeCount - result.completedCount,
+        //     },
+        //   },
+        // });
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: result.threads.map((thread) => ({
+            thread,
+            messages: null,
+          })),
+          threadStats: {
+            total: result.totalCount,
+            active: result.activeCount,
+            completed: result.completedCount,
+            paused:
+              result.totalCount - result.activeCount - result.completedCount,
           },
-        });
+        }));
       } else {
-        dispatch({
-          type: "SET_ERROR",
-          payload: result.error || "Failed to load training sessions",
-        });
+        // dispatch({
+        //   type: "SET_ERROR",
+        //   payload: result.error || "Failed to load training sessions",
+        // });
+        setState((prevState) => ({
+          ...prevState,
+          error: result.error || "Failed to load training sessions",
+        }));
       }
     } catch (error) {
       console.error("Error loading user threads:", error);
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Failed to load training sessions",
-      });
+      // dispatch({
+      //   type: "SET_ERROR",
+      //   payload: "Failed to load training sessions",
+      // });
+      setState((prevState) => ({
+        ...prevState,
+        error: "Failed to load training sessions",
+      }));
     } finally {
-      dispatch({ type: "SET_LOADING_THREADS", payload: false });
+      // dispatch({ type: "SET_LOADING_THREADS", payload: false });
+      setState((prevState) => ({
+        ...prevState,
+        isLoadingThreads: false,
+      }));
     }
   }, [authState.user?.uid]);
 
   // Load thread groups from database
   const loadThreadGroups = useCallback(async () => {
     if (!authState.user?.uid) {
-      dispatch({ type: "SET_THREAD_GROUPS", payload: [] });
+      // dispatch({ type: "SET_THREAD_GROUPS", payload: [] });
+      setState((prevState) => ({
+        ...prevState,
+        threadGroups: [],
+      }));
       return;
     }
 
-    dispatch({ type: "SET_LOADING_GROUPS", payload: true });
-    dispatch({ type: "SET_ERROR", payload: null });
+    // dispatch({ type: "SET_LOADING_GROUPS", payload: true });
+    // dispatch({ type: "SET_ERROR", payload: null });
+    setState((prevState) => ({
+      ...prevState,
+      isLoadingGroups: true,
+      error: null,
+    }));
 
     try {
       const groups = await getThreadGroupsWithCounts();
-      dispatch({ type: "SET_THREAD_GROUPS", payload: groups });
+      // dispatch({ type: "SET_THREAD_GROUPS", payload: groups });
+      setState((prevState) => ({
+        ...prevState,
+        threadGroups: groups.map((group) => ({
+          threadGroup: group,
+          threads: [],
+          isExpanded: false,
+        })),
+      }));
 
       // Group threads with their groups
       groupThreadsWithGroups();
     } catch (error) {
       console.error("Error loading thread groups:", error);
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Failed to load thread groups",
-      });
+      // dispatch({
+      //   type: "SET_ERROR",
+      //   payload: "Failed to load thread groups",
+      // });
+      setState((prevState) => ({
+        ...prevState,
+        error: "Failed to load thread groups",
+      }));
     } finally {
-      dispatch({ type: "SET_LOADING_GROUPS", payload: false });
+      // dispatch({ type: "SET_LOADING_GROUPS", payload: false });
+      setState((prevState) => ({
+        ...prevState,
+        isLoadingGroups: false,
+      }));
     }
   }, [authState.user?.uid]);
 
@@ -638,29 +477,32 @@ export function CoreAppDataProvider({
       (group) => ({
         ...group,
         threads: state.userThreads.filter(
-          (thread) => thread.groupId === group.id
+          (thread) => thread.thread.groupId === group.threadGroup.id
         ),
         threadCount: state.userThreads.filter(
-          (thread) => thread.groupId === group.id
+          (thread) => thread.thread.groupId === group.threadGroup.id
         ).length,
         isExpanded:
-          state.threadGroupsWithThreads.find((g) => g.id === group.id)
-            ?.isExpanded ?? true,
+          state.threadGroups.find(
+            (g) => g.threadGroup.id === group.threadGroup.id
+          )?.isExpanded ?? true,
       })
     );
 
-    dispatch({
-      type: "SET_THREAD_GROUPS_WITH_THREADS",
-      payload: groupsWithThreads,
-    });
-  }, [state.threadGroups, state.userThreads, state.threadGroupsWithThreads]);
+    // dispatch({
+    //   type: "SET_THREAD_GROUPS_WITH_THREADS",
+    //   payload: groupsWithThreads,
+    // });
+    setState((prevState) => ({
+      ...prevState,
+      threadGroupsWithThreads: groupsWithThreads,
+    }));
+  }, [state.threadGroups, state.userThreads, state.threadGroups]);
 
   // Update grouped threads when threads or groups change
   useEffect(() => {
-    if (state.settings.groupingEnabled) {
-      groupThreadsWithGroups();
-    }
-  }, [state.userThreads, state.threadGroups, state.settings.groupingEnabled]);
+    groupThreadsWithGroups();
+  }, [state.userThreads, state.threadGroups]);
 
   // Create a new thread group
   const createNewThreadGroup = useCallback(
@@ -669,7 +511,11 @@ export function CoreAppDataProvider({
         throw new Error("User must be logged in to create a thread group");
       }
 
-      dispatch({ type: "SET_LOADING", payload: true });
+      // dispatch({ type: "SET_LOADING", payload: true });
+      setState((prevState) => ({
+        ...prevState,
+        isLoading: true,
+      }));
 
       try {
         const newGroup = await createThreadGroup({
@@ -677,17 +523,36 @@ export function CoreAppDataProvider({
           groupFeedback,
         });
 
-        dispatch({ type: "ADD_THREAD_GROUP", payload: newGroup });
+        // dispatch({ type: "ADD_THREAD_GROUP", payload: newGroup });
+        setState((prevState) => ({
+          ...prevState,
+          threadGroups: [
+            ...prevState.threadGroups,
+            {
+              threadGroup: newGroup,
+              threads: [],
+              isExpanded: false,
+            },
+          ],
+        }));
         return newGroup;
       } catch (error) {
         console.error("Error creating thread group:", error);
-        dispatch({
-          type: "SET_ERROR",
-          payload: "Failed to create thread group",
-        });
+        // dispatch({
+        //   type: "SET_ERROR",
+        //   payload: "Failed to create thread group",
+        // });
+        setState((prevState) => ({
+          ...prevState,
+          error: "Failed to create thread group",
+        }));
         throw error;
       } finally {
-        dispatch({ type: "SET_LOADING", payload: false });
+        // dispatch({ type: "SET_LOADING", payload: false });
+        setState((prevState) => ({
+          ...prevState,
+          isLoading: false,
+        }));
       }
     },
     [authState.user]
@@ -702,16 +567,28 @@ export function CoreAppDataProvider({
 
       try {
         await updateThreadGroup(id, updates);
-        dispatch({
-          type: "UPDATE_THREAD_GROUP",
-          payload: { id, updates },
-        });
+        // dispatch({
+        //   type: "UPDATE_THREAD_GROUP",
+        //   payload: { id, updates },
+        // });
+        setState((prevState) => ({
+          ...prevState,
+          threadGroups: prevState.threadGroups.map((group) =>
+            group.threadGroup.id === id
+              ? { ...group, threadGroup: { ...group.threadGroup, ...updates } }
+              : group
+          ),
+        }));
       } catch (error) {
         console.error("Error updating thread group:", error);
-        dispatch({
-          type: "SET_ERROR",
-          payload: "Failed to update thread group",
-        });
+        // dispatch({
+        //   type: "SET_ERROR",
+        //   payload: "Failed to update thread group",
+        // });
+        setState((prevState) => ({
+          ...prevState,
+          error: "Failed to update thread group",
+        }));
         throw error;
       }
     },
@@ -727,13 +604,23 @@ export function CoreAppDataProvider({
 
       try {
         await deleteThreadGroup(id);
-        dispatch({ type: "DELETE_THREAD_GROUP", payload: id });
+        // dispatch({ type: "DELETE_THREAD_GROUP", payload: id });
+        setState((prevState) => ({
+          ...prevState,
+          threadGroups: prevState.threadGroups.filter(
+            (group) => group.threadGroup.id !== id
+          ),
+        }));
       } catch (error) {
         console.error("Error deleting thread group:", error);
-        dispatch({
-          type: "SET_ERROR",
-          payload: "Failed to delete thread group",
-        });
+        // dispatch({
+        //   type: "SET_ERROR",
+        //   payload: "Failed to delete thread group",
+        // });
+        setState((prevState) => ({
+          ...prevState,
+          error: "Failed to delete thread group",
+        }));
         throw error;
       }
     },
@@ -743,10 +630,12 @@ export function CoreAppDataProvider({
   // Toggle group expansion
   const toggleGroupExpansion = useCallback(
     (groupId: string, isExpanded: boolean) => {
-      dispatch({
-        type: "TOGGLE_GROUP_EXPANSION",
-        payload: { groupId, isExpanded },
-      });
+      setState((prevState) => ({
+        ...prevState,
+        threadGroups: prevState.threadGroups.map((group) =>
+          group.threadGroup.id === groupId ? { ...group, isExpanded } : group
+        ),
+      }));
     },
     []
   );
@@ -762,19 +651,23 @@ export function CoreAppDataProvider({
         await updateThread(threadId, { groupId } as any);
 
         // Update local state
-        dispatch({
-          type: "UPDATE_USER_THREAD",
-          payload: {
-            id: threadId,
-            updates: { groupId },
-          },
-        });
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === threadId
+              ? {
+                  ...threadWithMessages,
+                  thread: { ...threadWithMessages.thread, groupId },
+                }
+              : threadWithMessages
+          ),
+        }));
       } catch (error) {
         console.error("Error assigning thread to group:", error);
-        dispatch({
-          type: "SET_ERROR",
-          payload: "Failed to assign thread to group",
-        });
+        setState((prevState) => ({
+          ...prevState,
+          error: "Failed to assign thread to group",
+        }));
         throw error;
       }
     },
@@ -788,12 +681,15 @@ export function CoreAppDataProvider({
       scenario: any,
       persona: any,
       groupId?: string | null
-    ): Promise<UserThread> => {
+    ): Promise<ThreadWithMessages> => {
       if (!authState.user?.uid) {
         throw new Error("User must be logged in to start a training session");
       }
 
-      dispatch({ type: "SET_LOADING", payload: true });
+      setState((prevState) => ({
+        ...prevState,
+        isLoading: true,
+      }));
 
       try {
         // First get the user's internal ID
@@ -826,26 +722,37 @@ export function CoreAppDataProvider({
           groupId: groupId || null,
         });
 
-        // Convert to UserThread format
-        const userThread: UserThread = {
-          ...newThread,
-          isActive: true,
-          lastActivity: newThread.updatedAt,
+        // Convert to ThreadWithMessages format
+        const userThread: ThreadWithMessages = {
+          thread: newThread,
+          messages: null,
         };
 
         // Add to local state
-        dispatch({ type: "ADD_USER_THREAD", payload: userThread });
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: [
+            ...prevState.userThreads,
+            {
+              thread: newThread,
+              messages: null,
+            },
+          ],
+        }));
 
         return userThread;
       } catch (error) {
         console.error("Error starting training session:", error);
-        dispatch({
-          type: "SET_ERROR",
-          payload: "Failed to start training session",
-        });
+        setState((prevState) => ({
+          ...prevState,
+          error: "Failed to start training session",
+        }));
         throw error;
       } finally {
-        dispatch({ type: "SET_LOADING", payload: false });
+        setState((prevState) => ({
+          ...prevState,
+          isLoading: false,
+        }));
       }
     },
     [authState.user]
@@ -876,16 +783,20 @@ export function CoreAppDataProvider({
         });
 
         // Update thread's last activity
-        dispatch({
-          type: "UPDATE_USER_THREAD",
-          payload: {
-            id: threadId,
-            updates: {
-              lastActivity: new Date(),
-              updatedAt: new Date(),
-            },
-          },
-        });
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === threadId
+              ? {
+                  ...threadWithMessages,
+                  thread: {
+                    ...threadWithMessages.thread,
+                    updatedAt: new Date(),
+                  },
+                }
+              : threadWithMessages
+          ),
+        }));
       } catch (error) {
         console.error("Error adding message to training session:", error);
         throw error;
@@ -913,19 +824,23 @@ export function CoreAppDataProvider({
         } as any);
 
         // Update in local state
-        dispatch({
-          type: "UPDATE_USER_THREAD",
-          payload: {
-            id: threadId,
-            updates: {
-              status: "completed",
-              completedAt: new Date(),
-              score,
-              feedback,
-              isActive: false,
-            },
-          },
-        });
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === threadId
+              ? {
+                  ...threadWithMessages,
+                  thread: {
+                    ...threadWithMessages.thread,
+                    status: "completed",
+                    completedAt: new Date(),
+                    score,
+                    feedback,
+                  },
+                }
+              : threadWithMessages
+          ),
+        }));
       } catch (error) {
         console.error("Error completing training session:", error);
         throw error;
@@ -935,114 +850,246 @@ export function CoreAppDataProvider({
   );
 
   // Select a user thread (for navigation/viewing)
-  const selectUserThread = useCallback((thread: UserThread) => {
-    // This could be used to load the thread's messages and set it as active
-    console.log("Selected thread:", thread.id, thread.title);
-    // You could dispatch actions here to load thread details, messages, etc.
+  const selectUserThread = useCallback(async (thread: ThreadWithMessages) => {
+    try {
+      // Set the active thread ID
+      setState((prevState) => ({
+        ...prevState,
+        isLoading: true,
+        activeThreadId: thread.thread.id,
+      }));
+
+      // Fetch messages for this thread
+      const { getMessagesByChatId } = await import(
+        "../lib/db/actions/message-actions"
+      );
+      const messages = await getMessagesByChatId(thread.thread.id);
+
+      // Sort messages by timestamp
+      const sortedMessages = messages.sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+
+      // Update the thread with messages in state
+      setState((prevState) => ({
+        ...prevState,
+        userThreads: prevState.userThreads.map((threadWithMessages) =>
+          threadWithMessages.thread.id === thread.thread.id
+            ? {
+                ...threadWithMessages,
+                messages: sortedMessages,
+              }
+            : threadWithMessages
+        ),
+        isLoading: false,
+      }));
+
+      console.log(
+        "Selected thread:",
+        thread.thread.id,
+        thread.thread.title,
+        "with",
+        sortedMessages.length,
+        "messages"
+      );
+    } catch (error) {
+      console.error("Error selecting thread:", error);
+      setState((prevState) => ({
+        ...prevState,
+        error: "Failed to load thread messages",
+        isLoading: false,
+      }));
+    }
   }, []);
 
   // Action creators
   const setUserProfile = useCallback((profile: UserProfile) => {
-    dispatch({ type: "SET_USER_PROFILE", payload: profile });
+    setState((prevState) => ({
+      ...prevState,
+      userProfile: profile,
+    }));
   }, []);
 
   const updateUserPreferences = useCallback(
     (preferences: Partial<UserProfile["preferences"]>) => {
-      dispatch({ type: "UPDATE_USER_PREFERENCES", payload: preferences });
+      setState((prevState) => ({
+        ...prevState,
+        userProfile: prevState.userProfile
+          ? {
+              ...prevState.userProfile,
+              preferences: {
+                ...prevState.userProfile.preferences,
+                ...preferences,
+              },
+            }
+          : null,
+      }));
     },
     []
   );
-
-  const addTraining = useCallback((training: Training) => {
-    dispatch({ type: "ADD_TRAINING", payload: training });
-  }, []);
-
-  const updateTraining = useCallback(
-    (id: string, updates: Partial<Training>) => {
-      dispatch({ type: "UPDATE_TRAINING", payload: { id, updates } });
-    },
-    []
-  );
-
-  const deleteTraining = useCallback((id: string) => {
-    dispatch({ type: "DELETE_TRAINING", payload: id });
-  }, []);
-
-  const setActiveTraining = useCallback((training: Training | null) => {
-    dispatch({ type: "SET_ACTIVE_TRAINING", payload: training });
-  }, []);
 
   const addThread = useCallback((thread: Thread) => {
-    dispatch({ type: "ADD_THREAD", payload: thread });
+    // This function is not implemented as we're using database-backed threads
+    console.log("addThread called but not implemented");
   }, []);
 
   const updateThread = useCallback((id: string, updates: Partial<Thread>) => {
-    dispatch({ type: "UPDATE_THREAD", payload: { id, updates } });
+    // This function is not implemented as we're using database-backed threads
+    console.log("updateThread called but not implemented");
   }, []);
 
   const deleteThread = useCallback((id: string) => {
-    dispatch({ type: "DELETE_THREAD", payload: id });
+    // This function is not implemented as we're using database-backed threads
+    console.log("deleteThread called but not implemented");
   }, []);
 
   const setActiveThread = useCallback((thread: Thread | null) => {
-    dispatch({ type: "SET_ACTIVE_THREAD", payload: thread });
+    setState((prevState) => ({
+      ...prevState,
+      activeThreadId: thread?.id || null,
+    }));
   }, []);
 
-  const addMessageToThread = useCallback(
-    (threadId: string, message: Thread["messages"][0]) => {
-      dispatch({
-        type: "ADD_MESSAGE_TO_THREAD",
-        payload: { threadId, message },
-      });
-    },
-    []
-  );
+  const addMessageToThread = useCallback((threadId: string, message: any) => {
+    // This function is not implemented as we're using database-backed messages
+    console.log("addMessageToThread called but not implemented");
+  }, []);
 
   const setLoading = useCallback((loading: boolean) => {
-    dispatch({ type: "SET_LOADING", payload: loading });
+    setState((prevState) => ({
+      ...prevState,
+      isLoading: loading,
+    }));
   }, []);
 
-  const setError = useCallback((error: string | null) => {
-    dispatch({ type: "SET_ERROR", payload: error });
-  }, []);
-
-  const updateSettings = useCallback(
-    (settings: Partial<CoreAppState["settings"]>) => {
-      dispatch({ type: "UPDATE_SETTINGS", payload: settings });
+  const setError = useCallback(
+    (error: string | null, errorType: ErrorType | null) => {
+      setState((prevState) => ({
+        ...prevState,
+        error,
+        errorType,
+      }));
     },
     []
   );
+
+  const setActiveThreadId = useCallback((threadId: string | null) => {
+    setState((prevState) => ({
+      ...prevState,
+      activeThreadId: threadId,
+    }));
+  }, []);
+
+  // Scenario and Persona action creators
+  const setScenario = useCallback(
+    (scenario: ScenarioGeneratorSchema | null) => {
+      setState((prevState) => ({
+        ...prevState,
+        scenario: scenario || undefined,
+      }));
+    },
+    []
+  );
+
+  const setPersona = useCallback((persona: PersonaGeneratorSchema | null) => {
+    setState((prevState) => ({
+      ...prevState,
+      persona: persona || undefined,
+    }));
+  }, []);
+
+  const setCustomScenario = useCallback((customScenario: string | null) => {
+    setState((prevState) => ({
+      ...prevState,
+      customScenario,
+    }));
+  }, []);
+
+  const setCustomPersona = useCallback((customPersona: string | null) => {
+    setState((prevState) => ({
+      ...prevState,
+      customPersona,
+    }));
+  }, []);
+
+  const setIsRefiningScenario = useCallback((isRefining: boolean) => {
+    setState((prevState) => ({
+      ...prevState,
+      isRefiningScenario: isRefining,
+    }));
+  }, []);
+
+  const setIsRefiningPersona = useCallback((isRefining: boolean) => {
+    setState((prevState) => ({
+      ...prevState,
+      isRefiningPersona: isRefining,
+    }));
+  }, []);
 
   // Computed properties
   const activeTrainingThreads = React.useMemo(() => {
-    return state.activeTraining
-      ? state.threads.filter(
-          (thread) => thread.trainingId === state.activeTraining!.id
-        )
-      : [];
-  }, [state.threads, state.activeTraining]);
+    return state.userThreads
+      .filter(
+        (threadWithMessages) => threadWithMessages.thread.status === "active"
+      )
+      .map((threadWithMessages) => threadWithMessages);
+  }, [state.userThreads]);
 
   const completedTrainings = React.useMemo(() => {
-    return state.trainings.filter(
-      (training) => training.status === "completed"
-    );
-  }, [state.trainings]);
+    return state.userThreads
+      .filter(
+        (threadWithMessages) => threadWithMessages.thread.status === "completed"
+      )
+      .map((threadWithMessages) => ({
+        id: threadWithMessages.thread.id,
+        title: threadWithMessages.thread.title,
+        status: threadWithMessages.thread.status as "completed",
+        scenario: threadWithMessages.thread.scenario,
+        persona: threadWithMessages.thread.persona,
+        createdAt: threadWithMessages.thread.createdAt,
+        updatedAt: threadWithMessages.thread.updatedAt,
+        completedAt: threadWithMessages.thread.completedAt || undefined,
+        score: threadWithMessages.thread.score,
+        feedback: threadWithMessages.thread.feedback,
+      }));
+  }, [state.userThreads]);
 
   const recentThreads = React.useMemo(() => {
-    return state.threads
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    return state.userThreads
+      .map((threadWithMessages) => threadWithMessages)
+      .sort(
+        (a, b) => b.thread.updatedAt.getTime() - a.thread.updatedAt.getTime()
+      )
       .slice(0, 10);
-  }, [state.threads]);
+  }, [state.userThreads]);
 
   // Get threads that are not assigned to any group
   const ungroupedThreads = React.useMemo(() => {
-    return state.userThreads.filter((thread) => !thread.groupId);
+    return state.userThreads
+      .filter((threadWithMessages) => !threadWithMessages.thread.groupId)
+      .map((threadWithMessages) => threadWithMessages);
   }, [state.userThreads]);
 
   // Get grouped threads with their group information
   const groupedThreads = React.useMemo(() => {
-    return state.threadGroupsWithThreads;
-  }, [state.threadGroupsWithThreads]);
+    return state.threadGroups;
+  }, [state.threadGroups]);
+
+  // Memoize expensive thread statistics calculation
+  const threadStatistics = React.useMemo(() => {
+    return state.userThreads.reduce(
+      (acc, threadWithMessages) => {
+        acc.total++;
+        if (threadWithMessages.thread.status === "active") acc.active++;
+        else if (threadWithMessages.thread.status === "completed")
+          acc.completed++;
+        else if (threadWithMessages.thread.status === "paused") acc.paused++;
+        return acc;
+      },
+      { total: 0, active: 0, completed: 0, paused: 0 }
+    );
+  }, [state.userThreads]);
 
   // Auto-save effect (optional)
   useEffect(() => {
@@ -1056,9 +1103,494 @@ export function CoreAppDataProvider({
     }
   }, [state.settings.autoSaveInterval]);
 
+  const handleStartTraining = useCallback(async () => {
+    if (!authState.user?.uid) {
+      setError(
+        "User must be logged in to start a training session",
+        "validation"
+      );
+      return;
+    }
+
+    // Validate that we have either generated scenario/persona or custom ones
+    if (!state.scenario && !state.customScenario) {
+      setError(
+        "Please generate or provide a scenario before starting training",
+        "validation"
+      );
+      return;
+    }
+
+    if (!state.persona && !state.customPersona) {
+      setError(
+        "Please generate or provide a persona before starting training",
+        "validation"
+      );
+      return;
+    }
+
+    setLoading(true);
+    setError(null, null);
+
+    try {
+      // First get the user's internal ID from the database
+      const { getUserAuthByProvider } = await import(
+        "../lib/db/actions/user-auth-actions"
+      );
+      const userAuth = await getUserAuthByProvider(
+        "firebase",
+        authState.user.uid
+      );
+
+      if (!userAuth) {
+        throw new Error("User not found in database. Please contact support.");
+      }
+
+      // Call the training action with the current scenario and persona FIRST
+      const result = await startTrainingSession({
+        scenario: state.scenario,
+        guestPersona: state.persona,
+      });
+
+      // Check if AI operation was successful before proceeding with database operations
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Only proceed with database operations if AI was successful
+      console.log(
+        "AI training start successful, proceeding with database operations..."
+      );
+
+      // Create thread in database with the results
+      const threadTitle = result.scenario?.scenario_title || "Training Session";
+
+      const newThread = await createThread({
+        title: threadTitle,
+        userId: userAuth.userId, // Use the internal user ID, not Firebase UID
+        visibility: "private",
+        scenario: result.scenario || state.scenario || {},
+        persona: result.guestPersona || state.persona || {},
+        status: "active",
+        score: null,
+        feedback: null,
+        startedAt: new Date(),
+        completedAt: null,
+        version: "2",
+        deletedAt: null,
+        groupId: null,
+      });
+
+      // Save initial messages to database if any were generated
+      const savedMessages: any[] = [];
+      if (result.messages && result.messages.length > 0) {
+        for (const message of result.messages) {
+          const savedMessage = await createMessage({
+            chatId: newThread.id,
+            role: !isAIMessage(message) ? "trainee" : "AI",
+            parts: { content: message.content },
+            attachments: [],
+            isTraining: true,
+            messageRating: null,
+            messageSuggestions: null,
+          });
+          savedMessages.push(savedMessage);
+        }
+      }
+
+      // Update the state with the new thread
+      setState((prevState) => ({
+        ...prevState,
+        userThreads: [
+          ...prevState.userThreads,
+          { thread: newThread, messages: savedMessages },
+        ],
+        activeThreadId: newThread.id,
+        // Update scenario and persona with the results from the workflow
+        scenario: result.scenario || prevState.scenario,
+        persona: result.guestPersona || prevState.persona,
+      }));
+
+      console.log(
+        "Started new training session:",
+        newThread.id,
+        "with",
+        savedMessages.length,
+        "initial messages"
+      );
+    } catch (error) {
+      console.error("Error starting new training session:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to start new training session";
+      setError(errorMessage, "session");
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    authState.user,
+    state.scenario,
+    state.persona,
+    state.customScenario,
+    state.customPersona,
+    setLoading,
+    setError,
+  ]);
+
+  const handleUpdateTraining = useCallback(
+    async (
+      threadId: string,
+      userMessage: string,
+      scenario: ScenarioGeneratorSchema,
+      persona: PersonaGeneratorSchema,
+      conversationHistory: BaseMessage[]
+    ) => {
+      if (!authState.user?.uid) {
+        setError(
+          "User must be logged in to update training session",
+          "validation"
+        );
+        return;
+      }
+
+      setLoading(true);
+      setError(null, null);
+
+      try {
+        // Add the new user message to conversation history for AI processing
+        const { HumanMessage } = await import("@langchain/core/messages");
+        const updatedHistory = [
+          ...conversationHistory,
+          new HumanMessage(userMessage),
+        ];
+
+        // Call the update training action with updated conversation history FIRST
+        const result = await updateTrainingSession({
+          scenario,
+          guestPersona: persona,
+          messages: updatedHistory,
+        });
+
+        // Check if AI operation was successful before proceeding with database operations
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        // Only proceed with database operations if AI was successful
+        console.log(
+          "AI training update successful, proceeding with database operations..."
+        );
+
+        // Save the user message to database
+        const userMessageRecord = await createMessage({
+          chatId: threadId,
+          role: "trainee",
+          parts: { content: userMessage },
+          attachments: [],
+          isTraining: true,
+          messageRating: result.lastMessageRating || null,
+          messageSuggestions: result.lastMessageRatingReason || null,
+        });
+
+        // Update the user message with rating and suggestions if available
+        if (result.lastMessageRating || result.lastMessageRatingReason) {
+          const { updateMessageRatingAndSuggestions } = await import(
+            "../lib/db/actions/message-actions"
+          );
+          await updateMessageRatingAndSuggestions(
+            userMessageRecord.id,
+            result.lastMessageRating || null,
+            result.lastMessageRatingReason || null
+          );
+        }
+
+        // Save the AI response to database if present
+        if (result.guestResponse) {
+          const responseContent =
+            typeof result.guestResponse === "string"
+              ? result.guestResponse
+              : String(result.guestResponse);
+
+          await createMessage({
+            chatId: threadId,
+            role: "AI",
+            parts: { content: responseContent },
+            attachments: [],
+            isTraining: true,
+            messageRating: null,
+            messageSuggestions: null,
+          });
+        }
+
+        // Update thread status and feedback if training is completed
+        if (result.status === "completed") {
+          await updateThread(threadId, {
+            status: "completed",
+            completedAt: new Date(),
+            feedback: result.feedback || null,
+          } as any);
+        } else {
+          // Just update the last activity timestamp
+          await updateThread(threadId, {
+            updatedAt: new Date(),
+          } as any);
+        }
+
+        // Reload the thread messages from database to ensure consistency
+        const { getMessagesByChatId } = await import(
+          "../lib/db/actions/message-actions"
+        );
+        const updatedMessages = await getMessagesByChatId(threadId);
+        const sortedMessages = updatedMessages.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
+        // Update local state with refreshed data
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === threadId
+              ? {
+                  ...threadWithMessages,
+                  thread: {
+                    ...threadWithMessages.thread,
+                    updatedAt: new Date(),
+                    status:
+                      result.status === "completed"
+                        ? "completed"
+                        : threadWithMessages.thread.status,
+                    feedback:
+                      result.feedback || threadWithMessages.thread.feedback,
+                    completedAt:
+                      result.status === "completed"
+                        ? new Date()
+                        : threadWithMessages.thread.completedAt,
+                  },
+                  messages: sortedMessages,
+                }
+              : threadWithMessages
+          ),
+        }));
+
+        console.log(
+          "Updated training session:",
+          threadId,
+          "with status:",
+          result.status,
+          "and",
+          sortedMessages.length,
+          "total messages"
+        );
+      } catch (error) {
+        console.error("Error updating training session:", error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to update training session";
+        setError(errorMessage, "session");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authState.user, setLoading, setError]
+  );
+
+  const handleEndTraining = useCallback(
+    async (
+      threadId: string,
+      scenario: ScenarioGeneratorSchema,
+      persona: PersonaGeneratorSchema,
+      conversationHistory: BaseMessage[]
+    ) => {
+      if (!authState.user?.uid) {
+        setError(
+          "User must be logged in to end training session",
+          "validation"
+        );
+        return;
+      }
+
+      if (!scenario || !persona) {
+        setError(
+          "Scenario and persona are required to end training session",
+          "validation"
+        );
+        return;
+      }
+
+      if (!conversationHistory || conversationHistory.length === 0) {
+        setError(
+          "Cannot end training session without any conversation history",
+          "validation"
+        );
+        return;
+      }
+
+      setLoading(true);
+      setError(null, null);
+
+      try {
+        // Call the end training action FIRST
+        const result = await endTrainingSession({
+          scenario,
+          guestPersona: persona,
+          messages: conversationHistory,
+        });
+
+        // Check if AI operation was successful before proceeding with database operations
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        // Only proceed with database operations if AI was successful
+        console.log(
+          "AI training end successful, proceeding with database operations..."
+        );
+
+        // Update thread in database with completion status and feedback
+        const completedAt = new Date();
+        await updateThread(threadId, {
+          status: "completed",
+          completedAt,
+          feedback: result.feedback || null,
+          updatedAt: completedAt,
+        } as any);
+
+        // Update local state
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === threadId
+              ? {
+                  ...threadWithMessages,
+                  thread: {
+                    ...threadWithMessages.thread,
+                    status: "completed",
+                    completedAt,
+                    feedback: result.feedback || null,
+                    updatedAt: completedAt,
+                  },
+                }
+              : threadWithMessages
+          ),
+        }));
+
+        console.log(
+          "Ended training session:",
+          threadId,
+          "with feedback:",
+          result.feedback ? "Present" : "Not present"
+        );
+      } catch (error) {
+        console.error("Error ending training session:", error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to end training session";
+        setError(errorMessage, "session");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authState.user, setLoading, setError]
+  );
+
+  const handleRefineScenario = useCallback(
+    async (customScenario: string) => {
+      if (!authState.user?.uid) {
+        setError("User must be logged in to refine scenario", "validation");
+        return;
+      }
+
+      if (!customScenario || customScenario.trim().length === 0) {
+        setError("Please provide a scenario to refine", "validation");
+        return;
+      }
+
+      setIsRefiningScenario(true);
+      setError(null, null);
+
+      try {
+        // Call the refine scenario action FIRST
+        const result = await refineScenario({
+          scenario: customScenario.trim(),
+        });
+
+        // Check if AI operation was successful before proceeding with state updates
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        // Only proceed with state updates if AI was successful
+        if (result.refinedScenario) {
+          console.log("AI scenario refinement successful, updating state...");
+          setScenario(result.refinedScenario);
+          console.log("Refined scenario successfully");
+        } else {
+          throw new Error("No refined scenario returned from the service");
+        }
+      } catch (error) {
+        console.error("Error refining scenario:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to refine scenario";
+        setError(errorMessage, "agent");
+      } finally {
+        setIsRefiningScenario(false);
+      }
+    },
+    [authState.user, setIsRefiningScenario, setError, setScenario]
+  );
+
+  const handleRefinePersona = useCallback(
+    async (customPersona: string) => {
+      if (!authState.user?.uid) {
+        setError("User must be logged in to refine persona", "validation");
+        return;
+      }
+
+      if (!customPersona || customPersona.trim().length === 0) {
+        setError("Please provide a persona to refine", "validation");
+        return;
+      }
+
+      setIsRefiningPersona(true);
+      setError(null, null);
+
+      try {
+        // Call the refine persona action FIRST
+        const result = await refinePersona({
+          persona: customPersona.trim(),
+        });
+
+        // Check if AI operation was successful before proceeding with state updates
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        // Only proceed with state updates if AI was successful
+        if (result.refinedPersona) {
+          console.log("AI persona refinement successful, updating state...");
+          setPersona(result.refinedPersona);
+          console.log("Refined persona successfully");
+        } else {
+          throw new Error("No refined persona returned from the service");
+        }
+      } catch (error) {
+        console.error("Error refining persona:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to refine persona";
+        setError(errorMessage, "agent");
+      } finally {
+        setIsRefiningPersona(false);
+      }
+    },
+    [authState.user, setIsRefiningPersona, setError, setPersona]
+  );
+
   const contextValue: CoreAppContextType = {
     state,
-    dispatch,
     setUserProfile,
     updateUserPreferences,
     // Thread group methods
@@ -1074,27 +1606,33 @@ export function CoreAppDataProvider({
     addMessageToTrainingSession,
     completeTrainingSession,
     selectUserThread,
-    // Training methods
-    addTraining,
-    updateTraining,
-    deleteTraining,
-    setActiveTraining,
     // Thread methods
     addThread,
     updateThread,
     deleteThread,
     setActiveThread,
-    addMessageToThread,
+    // Scenario and Persona methods
+    setScenario,
+    setPersona,
+    setCustomScenario,
+    setCustomPersona,
+    setIsRefiningScenario,
+    setIsRefiningPersona,
     // Utility methods
     setLoading,
     setError,
-    updateSettings,
+    setActiveThreadId,
     // Computed properties
     activeTrainingThreads,
-    completedTrainings,
     recentThreads,
     ungroupedThreads,
     groupedThreads,
+    // New Training Functions
+    handleStartTraining,
+    handleUpdateTraining,
+    handleEndTraining,
+    handleRefineScenario,
+    handleRefinePersona,
   };
 
   return (
@@ -1112,13 +1650,3 @@ export function useCoreAppData() {
   }
   return context;
 }
-
-// Export types for use in other components
-export type {
-  Training,
-  Thread,
-  UserProfile,
-  CoreAppState,
-  ThreadGroup,
-  ThreadGroupWithThreads,
-};

@@ -1,5 +1,8 @@
 // Training Panel Components
 
+// Error Boundary Components
+export { ChatPageErrorBoundary } from './ChatPageErrorBoundary';
+
 // Theme Components
 export { ThemeToggle } from './ThemeToggle';
 

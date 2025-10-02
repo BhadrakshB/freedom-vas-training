@@ -82,8 +82,6 @@ export const TrainingState = Annotation.Root({
   ),
   status: Annotation<TrainingStateType>(),
   feedback: Annotation<FeedbackSchema>(),
-  customScenario: Annotation<string>(),
-  customPersona: Annotation<string>(),
 });
 
 // --- Define the makeAgentNode Factory Function ---

@@ -20,7 +20,7 @@ import type { UserThread } from "../lib/actions/user-threads-actions";
 interface LeftSidebarProps {
   children?: React.ReactNode;
   className?: string;
-  onThreadSelect?: (thread: UserThread) => void;
+  onThreadSelect?: (id: string | null) => void;
   selectedThreadId?: string | null;
 }
 
@@ -34,9 +34,7 @@ export function LeftSidebar({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { state: authState } = useAuth();
   const {
-    state: {
-      settings: { groupingEnabled },
-    },
+    state: {},
   } = useCoreAppData();
 
   const toggleCollapsed = useCallback(() => {
@@ -172,7 +170,7 @@ export function LeftSidebar({
             <AuthStatus />
 
             {/* Thread Group Manager */}
-            {authState.user && groupingEnabled && (
+            {authState.user && (
               <div className="pb-2">
                 <ThreadGroupManager />
               </div>
