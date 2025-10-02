@@ -1,18 +1,27 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LeftSidebar } from "./LeftSidebar";
 import { ErrorDisplay } from "./ErrorDisplay";
 import { TrainingStartScreen } from "./TrainingStartScreen";
 import { TrainingChatArea } from "./TrainingChatArea";
 import { ResizeHandle } from "./ResizeHandle";
+import { BulkSessionCreation } from "./BulkSessionCreation";
+import type { SessionConfiguration } from "./BulkSessionCreation";
 import { useResizePanel } from "../hooks/useResizePanel";
 import { useCoreAppData } from "../contexts/CoreAppDataContext";
 import { TrainingPanels } from "./TrainingPanels";
 
 export function ChatPage() {
   const resizePanel = useResizePanel();
+
+  // Local state for bulk session UI
+  const [showBulkCreation, setShowBulkCreation] = useState(false);
+  const [sessionConfigurations, setSessionConfigurations] = useState<
+    SessionConfiguration[]
+  >([{ id: "1", title: "Session 1", scenario: "", persona: "" }]);
+  const [groupName, setGroupName] = useState("");
 
   // Add global mouse event listeners for resizing
   useEffect(() => {
@@ -35,7 +44,135 @@ export function ChatPage() {
     resizePanel.handleMouseUp,
   ]);
 
-  const { state, setActiveThreadId, handleStartTraining } = useCoreAppData();
+  const {
+    state,
+    setActiveThreadId,
+    handleStartTraining,
+    loadUserThreads,
+    setBulkSessionCount,
+    updateBulkSessionConfig,
+    clearBulkSessionConfig,
+    handleStartBulkTraining,
+    createNewThreadGroup,
+  } = useCoreAppData();
+
+  // Handlers for bulk session UI
+  const handleShowBulkCreation = useCallback(() => {
+    setShowBulkCreation(true);
+    if (!groupName) {
+      setGroupName(`Training Group - ${new Date().toLocaleDateString()}`);
+    }
+  }, [groupName]);
+
+  const handleCloseBulkCreation = useCallback(() => {
+    setShowBulkCreation(false);
+  }, []);
+
+  const handleSessionCountChange = useCallback(
+    (count: number) => {
+      const validCount = Math.max(1, Math.min(20, count));
+      setBulkSessionCount(validCount);
+
+      const newConfigurations: SessionConfiguration[] = [];
+      for (let i = 1; i <= validCount; i++) {
+        const existingConfig = sessionConfigurations.find(
+          (config) => config.id === i.toString()
+        );
+        newConfigurations.push(
+          existingConfig || {
+            id: i.toString(),
+            title: `Session ${i}`,
+            scenario: "",
+            persona: "",
+          }
+        );
+      }
+      setSessionConfigurations(newConfigurations);
+    },
+    [sessionConfigurations, setBulkSessionCount]
+  );
+
+  const handleConfigurationChange = useCallback(
+    (id: string, field: keyof SessionConfiguration, value: string) => {
+      setSessionConfigurations((prev) =>
+        prev.map((config) =>
+          config.id === id ? { ...config, [field]: value } : config
+        )
+      );
+
+      // Update CoreAppDataContext with scenario/persona changes
+      const index = parseInt(id) - 1;
+      if (field === "scenario" || field === "persona") {
+        const config = sessionConfigurations.find((c) => c.id === id);
+        updateBulkSessionConfig(index, {
+          customScenario:
+            field === "scenario" ? value : config?.scenario || null,
+          customPersona: field === "persona" ? value : config?.persona || null,
+        });
+      }
+    },
+    [sessionConfigurations, updateBulkSessionConfig]
+  );
+
+  const handleRemoveConfiguration = useCallback(
+    (id: string) => {
+      setSessionConfigurations((prev) => {
+        if (prev.length <= 1) return prev;
+        const newConfigs = prev.filter((config) => config.id !== id);
+        setBulkSessionCount(newConfigs.length);
+        return newConfigs;
+      });
+    },
+    [setBulkSessionCount]
+  );
+
+  const handleAddConfiguration = useCallback(() => {
+    const newId = (sessionConfigurations.length + 1).toString();
+    const newConfig = {
+      id: newId,
+      title: `Session ${sessionConfigurations.length + 1}`,
+      scenario: "",
+      persona: "",
+    };
+    setSessionConfigurations((prev) => [...prev, newConfig]);
+    setBulkSessionCount(sessionConfigurations.length + 1);
+  }, [sessionConfigurations.length, setBulkSessionCount]);
+
+  const handleGroupNameChange = useCallback((name: string) => {
+    setGroupName(name);
+  }, []);
+
+  const handleStartAllSessions = async () => {
+    try {
+      // Create thread group first if group name is provided
+      let groupId: string | null = null;
+      if (groupName.trim()) {
+        const newGroup = await createNewThreadGroup(groupName.trim());
+        groupId = newGroup.id;
+      }
+
+      // Sync configurations to CoreAppDataContext
+      sessionConfigurations.forEach((config, index) => {
+        updateBulkSessionConfig(index, {
+          customScenario: config.scenario || null,
+          customPersona: config.persona || null,
+        });
+      });
+
+      // Start bulk training
+      await handleStartBulkTraining(groupId!);
+
+      // Reset UI state
+      setShowBulkCreation(false);
+      setSessionConfigurations([
+        { id: "1", title: "Session 1", scenario: "", persona: "" },
+      ]);
+      setGroupName("");
+      clearBulkSessionConfig();
+    } catch (error) {
+      console.error("Error creating bulk sessions:", error);
+    }
+  };
 
   return (
     <div className="h-screen flex bg-background">
@@ -71,9 +208,7 @@ export function ChatPage() {
             {state.activeThreadId == null ? (
               <TrainingStartScreen
                 onStartTraining={handleStartTraining}
-                onShowBulkCreation={() => {
-                  console.log("Bulk creation not yet implemented");
-                }}
+                onShowBulkCreation={handleShowBulkCreation}
                 isLoading={state.isLoading}
               />
             ) : (
@@ -97,6 +232,22 @@ export function ChatPage() {
           </div>
         </main>
       </div>
+
+      {/* Bulk Session Creation Modal */}
+      <BulkSessionCreation
+        show={showBulkCreation}
+        sessionCount={sessionConfigurations.length}
+        sessionConfigurations={sessionConfigurations}
+        groupName={groupName}
+        isCreatingBulkSessions={state.isBulkSessionInProgress}
+        onClose={handleCloseBulkCreation}
+        onSessionCountChange={handleSessionCountChange}
+        onConfigurationChange={handleConfigurationChange}
+        onRemoveConfiguration={handleRemoveConfiguration}
+        onAddConfiguration={handleAddConfiguration}
+        onGroupNameChange={handleGroupNameChange}
+        onStartAllSessions={handleStartAllSessions}
+      />
     </div>
   );
 }

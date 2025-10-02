@@ -126,6 +126,16 @@ interface CoreAppState {
   isRefiningScenario: boolean;
   isRefiningPersona: boolean;
 
+  // Bulk session state
+  bulkSessionConfig: {
+    numberOfSessions: number;
+    sessions: Array<{
+      customScenario: string | null;
+      customPersona: string | null;
+    }>;
+  };
+  isBulkSessionInProgress: boolean;
+
   // Settings
   settings: {
     autoSaveInterval: number;
@@ -180,6 +190,13 @@ const initialState: CoreAppState = {
     completed: 0,
     paused: 0,
   },
+
+  // Bulk session state
+  bulkSessionConfig: {
+    numberOfSessions: 1,
+    sessions: [],
+  },
+  isBulkSessionInProgress: false,
 };
 
 // Context interface
@@ -238,6 +255,14 @@ export interface CoreAppContextType {
   setIsRefiningScenario: (isRefining: boolean) => void;
   setIsRefiningPersona: (isRefining: boolean) => void;
 
+  // Bulk session actions
+  setBulkSessionCount: (count: number) => void;
+  updateBulkSessionConfig: (
+    index: number,
+    config: { customScenario: string | null; customPersona: string | null }
+  ) => void;
+  clearBulkSessionConfig: () => void;
+
   // Utility actions
   setLoading: (loading: boolean) => void;
   setError: (error: string | null, errorType: ErrorType | null) => void;
@@ -260,6 +285,9 @@ export interface CoreAppContextType {
   ) => Promise<void>;
   handleRefineScenario: (customScenario: string) => Promise<void>;
   handleRefinePersona: (customPersona: string) => Promise<void>;
+
+  // Bulk session functions
+  handleStartBulkTraining: (groupId: string) => Promise<void>;
 }
 
 // Create context
@@ -1012,6 +1040,57 @@ export function CoreAppDataProvider({
     }));
   }, []);
 
+  // Bulk session action creators
+  const setBulkSessionCount = useCallback((count: number) => {
+    setState((prevState) => {
+      const sessions = Array.from({ length: count }, (_, i) => ({
+        customScenario:
+          prevState.bulkSessionConfig.sessions[i]?.customScenario || null,
+        customPersona:
+          prevState.bulkSessionConfig.sessions[i]?.customPersona || null,
+      }));
+
+      return {
+        ...prevState,
+        bulkSessionConfig: {
+          numberOfSessions: count,
+          sessions,
+        },
+      };
+    });
+  }, []);
+
+  const updateBulkSessionConfig = useCallback(
+    (
+      index: number,
+      config: { customScenario: string | null; customPersona: string | null }
+    ) => {
+      setState((prevState) => {
+        const sessions = [...prevState.bulkSessionConfig.sessions];
+        sessions[index] = config;
+
+        return {
+          ...prevState,
+          bulkSessionConfig: {
+            ...prevState.bulkSessionConfig,
+            sessions,
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const clearBulkSessionConfig = useCallback(() => {
+    setState((prevState) => ({
+      ...prevState,
+      bulkSessionConfig: {
+        numberOfSessions: 1,
+        sessions: [],
+      },
+    }));
+  }, []);
+
   // Auto-save effect (optional)
   useEffect(() => {
     if (state.settings.autoSaveInterval > 0) {
@@ -1537,6 +1616,190 @@ export function CoreAppDataProvider({
     [authState.user, setIsRefiningPersona, setError, setPersona]
   );
 
+  const handleStartBulkTraining = useCallback(
+    async (groupId: string) => {
+      if (!authState.user?.uid) {
+        setError(
+          "User must be logged in to start bulk training sessions",
+          "validation"
+        );
+        return;
+      }
+
+      const { numberOfSessions, sessions } = state.bulkSessionConfig;
+
+      if (numberOfSessions < 1) {
+        setError("Number of sessions must be at least 1", "validation");
+        return;
+      }
+
+      if (sessions.length !== numberOfSessions) {
+        setError(
+          "Session configuration mismatch. Please reconfigure bulk sessions.",
+          "validation"
+        );
+        return;
+      }
+
+      setState((prevState) => ({
+        ...prevState,
+        isBulkSessionInProgress: true,
+        isLoading: true,
+      }));
+      setError(null, null);
+
+      try {
+        console.log(
+          `Starting ${numberOfSessions} training sessions in parallel...`
+        );
+
+        // Get user's internal ID once
+        const { getUserAuthByProvider } = await import(
+          "../lib/db/actions/user-auth-actions"
+        );
+        const userAuth = await getUserAuthByProvider(
+          "firebase",
+          authState.user.uid
+        );
+
+        if (!userAuth) {
+          throw new Error(
+            "User not found in database. Please contact support."
+          );
+        }
+
+        // Create array of promises for parallel execution
+        const sessionPromises = sessions.map(async (sessionConfig, index) => {
+          try {
+            console.log(
+              `Initializing session ${index + 1}/${numberOfSessions}...`
+            );
+
+            // Determine if we should use custom scenario/persona or generate new ones
+            const shouldUseCustomScenario =
+              sessionConfig.customScenario &&
+              sessionConfig.customScenario.trim().length > 0;
+            const shouldUseCustomPersona =
+              sessionConfig.customPersona &&
+              sessionConfig.customPersona.trim().length > 0;
+
+            // Call the training action to start the session
+            const result = await startTrainingSession({
+              scenario: shouldUseCustomScenario ? undefined : state.scenario,
+              guestPersona: shouldUseCustomPersona ? undefined : state.persona,
+            });
+
+            if (result.error) {
+              throw new Error(`Session ${index + 1}: ${result.error}`);
+            }
+
+            // Create thread in database
+            const threadTitle =
+              result.scenario?.scenario_title ||
+              `Training Session ${index + 1}`;
+
+            const newThread = await createThread({
+              title: threadTitle,
+              userId: userAuth.userId,
+              visibility: "private",
+              scenario: result.scenario || {},
+              persona: result.guestPersona || {},
+              status: "active",
+              score: null,
+              feedback: null,
+              startedAt: new Date(),
+              completedAt: null,
+              version: "2",
+              deletedAt: null,
+              groupId: groupId,
+            });
+
+            // Save initial messages if any
+            const savedMessages: any[] = [];
+            if (result.finalOutput && result.finalOutput.length > 0) {
+              const savedMessage = await createMessage({
+                chatId: newThread.id,
+                role: "AI",
+                parts: { content: result.finalOutput },
+                attachments: [],
+                isTraining: true,
+                messageRating: null,
+                messageSuggestions: null,
+              });
+              savedMessages.push(savedMessage);
+            }
+
+            console.log(
+              `Successfully created session ${index + 1}/${numberOfSessions}: ${
+                newThread.id
+              }`
+            );
+
+            return { thread: newThread, messages: savedMessages };
+          } catch (error) {
+            console.error(`Error creating session ${index + 1}:`, error);
+            throw error;
+          }
+        });
+
+        // Execute all session creations in parallel
+        const results = await Promise.all(sessionPromises);
+
+        // Update state with all new threads
+        setState((prevState) => {
+          const newThreads = results.map((result) => ({
+            thread: result.thread,
+            messages: result.messages,
+          }));
+
+          // Randomly select one thread as active
+          const randomIndex = Math.floor(Math.random() * newThreads.length);
+          const activeThreadId = newThreads[randomIndex].thread.id;
+
+          console.log(
+            `Randomly selected thread ${activeThreadId} as active (index ${randomIndex})`
+          );
+
+          return {
+            ...prevState,
+            userThreads: [...prevState.userThreads, ...newThreads],
+            activeThreadId,
+            isBulkSessionInProgress: false,
+            isLoading: false,
+          };
+        });
+
+        // Clear bulk session config after successful creation
+        clearBulkSessionConfig();
+
+        console.log(
+          `Successfully created ${numberOfSessions} training sessions in parallel`
+        );
+      } catch (error) {
+        console.error("Error starting bulk training sessions:", error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to start bulk training sessions";
+        setError(errorMessage, "session");
+
+        setState((prevState) => ({
+          ...prevState,
+          isBulkSessionInProgress: false,
+          isLoading: false,
+        }));
+      }
+    },
+    [
+      authState.user,
+      state.bulkSessionConfig,
+      state.scenario,
+      state.persona,
+      setError,
+      clearBulkSessionConfig,
+    ]
+  );
+
   const contextValue: CoreAppContextType = {
     state,
     setUserProfile,
@@ -1571,6 +1834,11 @@ export function CoreAppDataProvider({
     handleEndTraining,
     handleRefineScenario,
     handleRefinePersona,
+    // Bulk session methods
+    setBulkSessionCount,
+    updateBulkSessionConfig,
+    clearBulkSessionConfig,
+    handleStartBulkTraining,
   };
 
   return (
