@@ -230,11 +230,6 @@ export interface CoreAppContextType {
   ) => Promise<void>;
   selectUserThread: (threadId: string) => Promise<void>;
 
-  // Thread actions (UI state)
-  addThread: (thread: Thread) => void;
-  updateThread: (id: string, updates: Partial<Thread>) => void;
-  deleteThread: (id: string) => void;
-
   // Scenario and Persona actions
   setScenario: (scenario: ScenarioGeneratorSchema | null) => void;
   setPersona: (persona: PersonaGeneratorSchema | null) => void;
@@ -946,21 +941,6 @@ export function CoreAppDataProvider({
     []
   );
 
-  const addThread = useCallback((thread: Thread) => {
-    // This function is not implemented as we're using database-backed threads
-    console.log("addThread called but not implemented");
-  }, []);
-
-  const updateThread = useCallback((id: string, updates: Partial<Thread>) => {
-    // This function is not implemented as we're using database-backed threads
-    console.log("updateThread called but not implemented");
-  }, []);
-
-  const deleteThread = useCallback((id: string) => {
-    // This function is not implemented as we're using database-backed threads
-    console.log("deleteThread called but not implemented");
-  }, []);
-
   const setLoading = useCallback((loading: boolean) => {
     setState((prevState) => ({
       ...prevState,
@@ -1215,14 +1195,23 @@ export function CoreAppDataProvider({
       try {
         // Add the new user message to conversation history for AI processing
         const { HumanMessage } = await import("@langchain/core/messages");
+
+        // Convert ExtendedHumanMessageImpl instances to HumanMessage
+        const processedHistory = conversationHistory.map((message) => {
+          if (message instanceof ExtendedHumanMessageImpl) {
+            return message.toHumanMessage();
+          }
+          return message;
+        });
+
         const updatedHistory = [
-          ...conversationHistory,
+          ...processedHistory,
           new HumanMessage(userMessage),
         ];
 
         // Call the update training action with updated conversation history FIRST
         const result = await updateTrainingSession({
-          scenario,
+          scenario: scenario,
           guestPersona: persona,
           messages: updatedHistory,
         });
@@ -1565,10 +1554,6 @@ export function CoreAppDataProvider({
     addMessageToTrainingSession,
     completeTrainingSession,
     selectUserThread,
-    // Thread methods
-    addThread,
-    updateThread,
-    deleteThread,
     // Scenario and Persona methods
     setScenario,
     setPersona,
