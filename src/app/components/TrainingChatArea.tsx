@@ -4,7 +4,10 @@ import React, { useMemo, useState, useCallback } from "react";
 import { MessageArea } from "./MessageArea";
 import { MessageInput } from "./MessageInput";
 import { CompletionFooter, TrainingStatusIndicator } from "./";
-import { useCoreAppData } from "../contexts/CoreAppDataContext";
+import {
+  ExtendedHumanMessageImpl,
+  useCoreAppData,
+} from "../contexts/CoreAppDataContext";
 import { BaseMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
 
 export function TrainingChatArea() {
@@ -13,6 +16,7 @@ export function TrainingChatArea() {
     handleUpdateTraining,
     handleEndTraining,
     handleStartTraining,
+    setActiveThreadId,
   } = useCoreAppData();
   const [isEndingTraining, setIsEndingTraining] = useState(false);
 
@@ -36,7 +40,22 @@ export function TrainingChatArea() {
           : (dbMessage.parts as any)?.content || "";
 
       if (dbMessage.role === "trainee") {
-        return new HumanMessage(content);
+        // Parse message rating and suggestions into objects
+        const messageRating =
+          typeof dbMessage.messageRating === "string"
+            ? JSON.parse(dbMessage.messageRating)
+            : dbMessage.messageRating;
+
+        const messageSuggestions =
+          typeof dbMessage.messageSuggestions === "string"
+            ? JSON.parse(dbMessage.messageSuggestions)
+            : dbMessage.messageSuggestions;
+
+        return new ExtendedHumanMessageImpl(
+          content,
+          messageRating,
+          messageSuggestions
+        );
       } else {
         return new AIMessage(content);
       }
@@ -112,7 +131,8 @@ export function TrainingChatArea() {
 
   // Handle starting a new session
   const handleStartNewSession = useCallback(() => {
-    handleStartTraining();
+    // handleStartTraining();
+    setActiveThreadId(null);
   }, [handleStartTraining]);
 
   // Handle retry on error

@@ -67,8 +67,6 @@ function MessageList({ messages }: { messages: BaseMessage[] }) {
 }
 
 function MessageBubble({ message }: { message: BaseMessage }) {
-  const [showTooltip, setShowTooltip] = React.useState(false);
-
   const isHuman =
     message instanceof HumanMessage ||
     message instanceof ExtendedHumanMessageImpl;
@@ -120,67 +118,52 @@ function MessageBubble({ message }: { message: BaseMessage }) {
         {isHuman &&
           (rating !== undefined ||
             (listOfSuggestions && listOfSuggestions.length > 0)) && (
-            <div className="flex items-center gap-2">
-              {/* Always visible rating */}
+            <div className="max-w-[85%] sm:max-w-[80%] md:max-w-[70%] space-y-2">
+              {/* Rating Badge */}
               {rating !== undefined && (
-                <div
-                  className={cn(
-                    "text-xs px-2 py-1 rounded-full border font-medium flex items-center gap-1",
-                    rating >= 8
-                      ? "bg-green-100 text-green-800 border-green-200"
-                      : rating >= 6
-                      ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                      : "bg-red-100 text-red-800 border-red-200"
-                  )}
-                >
-                  <span>{rating}/10</span>
-                  <span className="text-yellow-500">⭐</span>
+                <div className="flex justify-end">
+                  <div
+                    className={cn(
+                      "text-xs px-2 py-1 rounded-full border font-medium flex items-center gap-1",
+                      rating >= 8
+                        ? "bg-green-100 text-green-800 border-green-200"
+                        : rating >= 6
+                        ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                        : "bg-red-100 text-red-800 border-red-200"
+                    )}
+                  >
+                    <span>{rating}/10</span>
+                    <span className="text-yellow-500">⭐</span>
+                  </div>
                 </div>
               )}
 
-              {/* Suggestions hover indicator */}
+              {/* Suggestions Section */}
               {listOfSuggestions && listOfSuggestions.length > 0 && (
-                <div
-                  className="relative"
-                  onMouseEnter={() => setShowTooltip(true)}
-                  onMouseLeave={() => setShowTooltip(false)}
-                >
-                  <div className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors cursor-pointer flex items-center gap-1 font-medium">
-                    <span>💡</span>
-                    <span>{listOfSuggestions.length} suggestions</span>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="px-3 py-2 bg-blue-100 border-b border-blue-200">
+                    <div className="text-xs font-medium text-blue-700 flex items-center gap-1.5">
+                      <span>💡</span>
+                      <span>
+                        Alternative Responses ({listOfSuggestions.length})
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Hover Tooltip with Blue Design */}
-                  {showTooltip && (
-                    <div className="absolute top-full right-0 mt-2 w-96 max-w-[90vw] z-50 animate-in fade-in-0 zoom-in-95 duration-200">
-                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-                        {/* Blue Header */}
-                        <div className="px-4 py-3 bg-blue-100 border-b border-blue-200">
-                          <div className="text-sm font-medium text-blue-700 flex items-center gap-2">
-                            <span className="text-blue-600">💡</span>
-                            <span>Alternate Responses</span>
-                          </div>
-                        </div>
-
-                        {/* Suggestions List */}
-                        <div className="p-4 space-y-3">
-                          {listOfSuggestions.map((suggestion, index) => (
-                            <div
-                              key={index}
-                              className="relative pl-4 py-2 text-sm text-gray-700 leading-relaxed bg-gray-100 rounded"
-                            >
-                              {/* Short blue accent bar */}
-                              <div className="absolute left-0 top-0 w-1 h-10 bg-blue-400 rounded-full right-2"></div>
-                              {suggestion.Response}
-                            </div>
-                          ))}
-                        </div>
+                  {/* Suggestions List */}
+                  <div className="p-3 space-y-2">
+                    {listOfSuggestions.map((suggestion, index) => (
+                      <div
+                        key={index}
+                        className="relative pl-3 py-2 text-xs text-gray-700 leading-relaxed bg-white rounded border border-blue-100"
+                      >
+                        {/* Blue accent bar */}
+                        <div className="absolute left-0 top-2 bottom-2 w-1 bg-blue-400 rounded-full"></div>
+                        {suggestion.Response}
                       </div>
-
-                      {/* Tooltip Arrow pointing up */}
-                      <div className="absolute bottom-full right-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-l-transparent border-r-transparent border-b-gray-200"></div>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

@@ -90,29 +90,6 @@ export class ExtendedHumanMessageImpl
   }
 }
 
-export interface ThreadState {
-  id: string;
-  name: string; // User-friendly name for the session
-  messages: BaseMessage[];
-  scenario: ScenarioGeneratorSchema | null;
-  persona: PersonaGeneratorSchema | null;
-  customScenario: string;
-  customPersona: string;
-  isRefiningScenario: boolean;
-  isRefiningPersona: boolean;
-  errorMessage: string | null;
-  errorType: ErrorType | null;
-  sessionFeedback: FeedbackSchema | null;
-  isLoading: boolean;
-  trainingStarted: boolean;
-  trainingStatus: TrainingStateType;
-  lastFailedMessage: string | null;
-  currentThreadId: string | null;
-  createdAt: Date;
-  lastActivity: Date;
-  isArchived: boolean;
-}
-
 export interface ThreadWithMessages {
   thread: Thread;
   messages: DBMessage[] | null;
@@ -251,13 +228,12 @@ export interface CoreAppContextType {
     score: any,
     feedback: any
   ) => Promise<void>;
-  selectUserThread: (thread: ThreadWithMessages) => void;
+  selectUserThread: (threadId: string) => Promise<void>;
 
   // Thread actions (UI state)
   addThread: (thread: Thread) => void;
   updateThread: (id: string, updates: Partial<Thread>) => void;
   deleteThread: (id: string) => void;
-  setActiveThread: (thread: Thread | null) => void;
 
   // Scenario and Persona actions
   setScenario: (scenario: ScenarioGeneratorSchema | null) => void;
@@ -271,12 +247,6 @@ export interface CoreAppContextType {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null, errorType: ErrorType | null) => void;
   setActiveThreadId: (id: string | null) => void;
-
-  // Computed properties
-  activeTrainingThreads: ThreadWithMessages[];
-  recentThreads: ThreadWithMessages[];
-  ungroupedThreads: ThreadWithMessages[];
-  groupedThreads: ThreadGroupWithThreads[];
 
   // New Training Functions
   handleStartTraining: () => void;
@@ -377,11 +347,12 @@ export function CoreAppDataProvider({
         //     },
         //   },
         // });
+        // Load threads without messages (lazy-load messages when thread is selected)
         setState((prevState) => ({
           ...prevState,
           userThreads: result.threads.map((thread) => ({
             thread,
-            messages: null,
+            messages: null, // Messages will be fetched when thread is selected
           })),
           threadStats: {
             total: result.totalCount,
@@ -391,6 +362,10 @@ export function CoreAppDataProvider({
               result.totalCount - result.activeCount - result.completedCount,
           },
         }));
+
+        state.userThreads.forEach((threadWithMessages) => {
+          console.log("Thread ID:", threadWithMessages.thread.id);
+        });
       } else {
         // dispatch({
         //   type: "SET_ERROR",
@@ -851,58 +826,99 @@ export function CoreAppDataProvider({
   );
 
   // Select a user thread (for navigation/viewing)
-  const selectUserThread = useCallback(async (thread: ThreadWithMessages) => {
-    try {
-      // Set the active thread ID
-      setState((prevState) => ({
-        ...prevState,
-        isLoading: true,
-        activeThreadId: thread.thread.id,
-      }));
+  const selectUserThread = useCallback(
+    async (threadId: string) => {
+      try {
+        // Set the active thread ID immediately
+        setState((prevState) => ({
+          ...prevState,
+          activeThreadId: threadId,
+        }));
 
-      // Fetch messages for this thread
-      const { getMessagesByChatId } = await import(
-        "../lib/db/actions/message-actions"
-      );
-      const messages = await getMessagesByChatId(thread.thread.id);
+        // Loop through userThreads and console log the id
+        state.userThreads.forEach((threadWithMessages) => {
+          console.log("Thread ID:", threadWithMessages.thread.id);
+        });
 
-      // Sort messages by timestamp
-      const sortedMessages = messages.sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      );
+        // Find the thread in the current state
+        const thread = state.userThreads.find(
+          (threadWithMessages) => threadWithMessages.thread.id === threadId
+        );
 
-      // Update the thread with messages in state
-      setState((prevState) => ({
-        ...prevState,
-        userThreads: prevState.userThreads.map((threadWithMessages) =>
-          threadWithMessages.thread.id === thread.thread.id
-            ? {
-                ...threadWithMessages,
-                messages: sortedMessages,
-              }
-            : threadWithMessages
-        ),
-        isLoading: false,
-      }));
+        if (!thread) {
+          console.error("Thread not found:", threadId);
+          setState((prevState) => ({
+            ...prevState,
+            error: "Thread not found",
+          }));
+          return;
+        }
 
-      console.log(
-        "Selected thread:",
-        thread.thread.id,
-        thread.thread.title,
-        "with",
-        sortedMessages.length,
-        "messages"
-      );
-    } catch (error) {
-      console.error("Error selecting thread:", error);
-      setState((prevState) => ({
-        ...prevState,
-        error: "Failed to load thread messages",
-        isLoading: false,
-      }));
-    }
-  }, []);
+        // Check if messages are already loaded
+        if (thread.messages !== null) {
+          console.log(
+            "Thread already has messages loaded:",
+            thread.thread.id,
+            thread.thread.title,
+            "with",
+            thread.messages.length,
+            "messages"
+          );
+          return;
+        }
+
+        // Messages not loaded, fetch from database
+        setState((prevState) => ({
+          ...prevState,
+          isLoading: true,
+        }));
+
+        const { getMessagesByChatId } = await import(
+          "../lib/db/actions/message-actions"
+        );
+        const messages = await getMessagesByChatId(thread.thread.id);
+
+        console.log(`message: ${messages} \nlength: ${messages.length}`);
+
+        // Sort messages by timestamp
+        const sortedMessages = messages.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+
+        // Update the thread with messages in state
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === thread.thread.id
+              ? {
+                  ...threadWithMessages,
+                  messages: sortedMessages,
+                }
+              : threadWithMessages
+          ),
+          isLoading: false,
+        }));
+
+        console.log(
+          "Fetched messages for thread:",
+          thread.thread.id,
+          thread.thread.title,
+          "with",
+          sortedMessages.length,
+          "messages"
+        );
+      } catch (error) {
+        console.error("Error selecting thread:", error);
+        setState((prevState) => ({
+          ...prevState,
+          error: "Failed to load thread messages",
+          isLoading: false,
+        }));
+      }
+    },
+    [state.userThreads]
+  );
 
   // Action creators
   const setUserProfile = useCallback((profile: UserProfile) => {
@@ -943,18 +959,6 @@ export function CoreAppDataProvider({
   const deleteThread = useCallback((id: string) => {
     // This function is not implemented as we're using database-backed threads
     console.log("deleteThread called but not implemented");
-  }, []);
-
-  const setActiveThread = useCallback((thread: Thread | null) => {
-    setState((prevState) => ({
-      ...prevState,
-      activeThreadId: thread?.id || null,
-    }));
-  }, []);
-
-  const addMessageToThread = useCallback((threadId: string, message: any) => {
-    // This function is not implemented as we're using database-backed messages
-    console.log("addMessageToThread called but not implemented");
   }, []);
 
   const setLoading = useCallback((loading: boolean) => {
@@ -1027,70 +1031,6 @@ export function CoreAppDataProvider({
       isRefiningPersona: isRefining,
     }));
   }, []);
-
-  // Computed properties
-  const activeTrainingThreads = React.useMemo(() => {
-    return state.userThreads
-      .filter(
-        (threadWithMessages) => threadWithMessages.thread.status === "active"
-      )
-      .map((threadWithMessages) => threadWithMessages);
-  }, [state.userThreads]);
-
-  const completedTrainings = React.useMemo(() => {
-    return state.userThreads
-      .filter(
-        (threadWithMessages) => threadWithMessages.thread.status === "completed"
-      )
-      .map((threadWithMessages) => ({
-        id: threadWithMessages.thread.id,
-        title: threadWithMessages.thread.title,
-        status: threadWithMessages.thread.status as "completed",
-        scenario: threadWithMessages.thread.scenario,
-        persona: threadWithMessages.thread.persona,
-        createdAt: threadWithMessages.thread.createdAt,
-        updatedAt: threadWithMessages.thread.updatedAt,
-        completedAt: threadWithMessages.thread.completedAt || undefined,
-        score: threadWithMessages.thread.score,
-        feedback: threadWithMessages.thread.feedback,
-      }));
-  }, [state.userThreads]);
-
-  const recentThreads = React.useMemo(() => {
-    return state.userThreads
-      .map((threadWithMessages) => threadWithMessages)
-      .sort(
-        (a, b) => b.thread.updatedAt.getTime() - a.thread.updatedAt.getTime()
-      )
-      .slice(0, 10);
-  }, [state.userThreads]);
-
-  // Get threads that are not assigned to any group
-  const ungroupedThreads = React.useMemo(() => {
-    return state.userThreads
-      .filter((threadWithMessages) => !threadWithMessages.thread.groupId)
-      .map((threadWithMessages) => threadWithMessages);
-  }, [state.userThreads]);
-
-  // Get grouped threads with their group information
-  const groupedThreads = React.useMemo(() => {
-    return state.threadGroups;
-  }, [state.threadGroups]);
-
-  // Memoize expensive thread statistics calculation
-  const threadStatistics = React.useMemo(() => {
-    return state.userThreads.reduce(
-      (acc, threadWithMessages) => {
-        acc.total++;
-        if (threadWithMessages.thread.status === "active") acc.active++;
-        else if (threadWithMessages.thread.status === "completed")
-          acc.completed++;
-        else if (threadWithMessages.thread.status === "paused") acc.paused++;
-        return acc;
-      },
-      { total: 0, active: 0, completed: 0, paused: 0 }
-    );
-  }, [state.userThreads]);
 
   // Auto-save effect (optional)
   useEffect(() => {
@@ -1340,10 +1280,14 @@ export function CoreAppDataProvider({
 
         // Update thread status and feedback if training is completed
         if (result.status === "completed") {
+          console.log(
+            `Training completed for thread ${threadId}, updating database with completion status and feedback`
+          );
           await updateThread(threadId, {
             status: "completed",
             completedAt: new Date(),
             feedback: result.feedback || null,
+            updatedAt: new Date(),
           } as any);
         } else {
           // Just update the last activity timestamp
@@ -1625,7 +1569,6 @@ export function CoreAppDataProvider({
     addThread,
     updateThread,
     deleteThread,
-    setActiveThread,
     // Scenario and Persona methods
     setScenario,
     setPersona,
@@ -1637,11 +1580,6 @@ export function CoreAppDataProvider({
     setLoading,
     setError,
     setActiveThreadId,
-    // Computed properties
-    activeTrainingThreads,
-    recentThreads,
-    ungroupedThreads,
-    groupedThreads,
     // New Training Functions
     handleStartTraining,
     handleUpdateTraining,

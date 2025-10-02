@@ -51,14 +51,28 @@ export function UserThreadsList({
       threadGroups,
       isLoadingGroups,
     },
-    ungroupedThreads,
-    groupedThreads,
     toggleGroupExpansion,
     createNewThreadGroup,
     assignThreadToGroup,
+    selectUserThread,
   } = coreAppData;
 
   const isLoading = isLoadingThreads || isLoadingGroups;
+
+  // Group threads locally based on their groupId
+  const groupedThreads = React.useMemo(() => {
+    return threadGroups.map((group) => ({
+      ...group,
+      threads: userThreads.filter(
+        (thread) => thread.thread.groupId === group.threadGroup.id
+      ),
+    }));
+  }, [threadGroups, userThreads]);
+
+  // Get ungrouped threads (threads without a groupId)
+  const ungroupedThreads = React.useMemo(() => {
+    return userThreads.filter((thread) => !thread.thread.groupId);
+  }, [userThreads]);
 
   // Format date for display
   const formatDate = (date: Date) => {
@@ -98,6 +112,14 @@ export function UserThreadsList({
     setShowCreateGroup(false);
   };
 
+  // Handle thread selection
+  const handleThreadSelect = async (thread: ThreadWithMessages) => {
+    // Call selectUserThread to fetch messages if needed
+    await selectUserThread(thread.thread.id);
+    // Also call the optional callback
+    onThreadSelect?.(thread.thread.id);
+  };
+
   // Render a single thread item
   const renderThread = (thread: ThreadWithMessages, isInGroup = false) => {
     const statusColor =
@@ -112,7 +134,7 @@ export function UserThreadsList({
     return (
       <button
         key={thread.thread.id}
-        onClick={() => onThreadSelect?.(thread.thread.id)}
+        onClick={() => handleThreadSelect(thread)}
         className={cn(
           "w-full text-left p-2 rounded transition-colors group",
           isInGroup && "ml-4",
