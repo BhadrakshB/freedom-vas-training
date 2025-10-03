@@ -1,5 +1,5 @@
 import { HumanMessage } from "@langchain/core/messages"
-import { MessageRatingState, TrainingState } from "./graph_v2"
+import { MessageRatingState, ScenarioPersonaRefineState, TrainingState } from "./graph_v2"
 
 
 var scenarioGeneratorPromptXML = (state: typeof TrainingState.State) => {
@@ -69,9 +69,6 @@ var personaGeneratorPromptXML = (state: typeof TrainingState.State) => {
       <Rule>If a custom persona is provided, expand it with necessary structure while preserving its core intent.</Rule>
       <Rule>Keep persona descriptions concise, specific, and relevant to VA training.</Rule>
     </RULES>
-    <INPUT>
-      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
-    </INPUT>
     <OUTPUT_SCHEMA>
       <Persona>
         <Name>string</Name>
@@ -111,6 +108,10 @@ var personaGeneratorPromptXML = (state: typeof TrainingState.State) => {
         </Escalation_Behavior>
       </Persona>
     </EXAMPLE_OUTPUT>
+    <INPUT>
+      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+    </INPUT>
+    
   </INSTRUCTIONS>
 </Prompt>`
 }
@@ -135,17 +136,6 @@ You are the Customer Simulating Agent for an STR virtual assistant training plat
   <Rule>Do not mark Resolution_Accepted as true prematurely; ensure the resolution is clearly stated by the trainee in the conversation history and would satisfy a genuine customer based on the persona.</Rule>
 </RULES>
 
-<INPUTS>
-  <Scenario>${JSON.stringify(state.scenario)}</Scenario>
-  <Persona>${JSON.stringify(state.persona)}</Persona>
-  <Conversation_History>${state.conversationHistory.map((element, index) => {
-    return {
-      index,
-      role: element instanceof HumanMessage ? 'user' : 'system',
-      content: element.content
-    }
-  })}</Conversation_History>
-</INPUTS>
 
 <OUTPUT_SCHEMA>
 <Customer_Simulation>
@@ -165,6 +155,19 @@ You are the Customer Simulating Agent for an STR virtual assistant training plat
   <Resolution_Accepted>false</Resolution_Accepted>
 </Customer_Simulation>
 </EXAMPLE_OUTPUT>
+
+<INPUTS>
+  <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+  <Persona>${JSON.stringify(state.persona)}</Persona>
+  <Conversation_History>${state.conversationHistory.map((element, index) => {
+    return {
+      index,
+      role: element instanceof HumanMessage ? 'user' : 'system',
+      content: element.content
+    }
+  })}</Conversation_History>
+</INPUTS>
+
 </INSTRUCTIONS>`
 }
 
@@ -180,11 +183,6 @@ var feedbackGeneratorPromptXML = (state: typeof TrainingState.State) => {
       <Rule>Provide concise, actionable suggestions focused on empathy, professionalism, and problem-solving in STR operations.</Rule>
       <Rule>Keep feedback objective, relevant, and aligned with the scenario's success criteria.</Rule>
     </RULES>
-    <INPUTS>
-      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
-      <Persona>${JSON.stringify(state.persona)}</Persona>
-      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'system', content: message.content })))}</Conversation_History>
-    </INPUTS>
     <OUTPUT_SCHEMA>
       <Training_Feedback>
         <Overall_Feedback>string</Overall_Feedback>
@@ -235,6 +233,11 @@ var feedbackGeneratorPromptXML = (state: typeof TrainingState.State) => {
         </General_Suggestions>
       </Training_Feedback>
     </EXAMPLE_OUTPUT>
+    <INPUTS>
+      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+      <Persona>${JSON.stringify(state.persona)}</Persona>
+      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'system', content: message.content })))}</Conversation_History>
+    </INPUTS>
   </INSTRUCTIONS>
 </Prompt>`
 }
@@ -251,12 +254,6 @@ var messageRatingPromptXML = (state: typeof MessageRatingState.State) => {
       <Rule>Provide a concise rationale (1-2 sentences) explaining the rating, focusing on empathy, professionalism, and problem-solving.</Rule>
       <Rule>Ensure the rating reflects the message's impact on resolving the scenario's core problem.</Rule>
     </RULES>
-    <INPUTS>
-      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
-      <Persona>${JSON.stringify(state.persona)}</Persona>
-      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
-      <Latest_Trainee_Message>${JSON.stringify(state.conversationHistory.filter(message => message instanceof HumanMessage).slice(-1)[0]?.content || "None")}</Latest_Trainee_Message>
-    </INPUTS>
     <OUTPUT_SCHEMA>
       <Message_Rating>
         <Rating>number</Rating>
@@ -268,7 +265,13 @@ var messageRatingPromptXML = (state: typeof MessageRatingState.State) => {
         <Rating>6</Rating>
         <Rationale>The trainee's response was polite but lacked empathy, missing an opportunity to acknowledge the guest's frustration as per the persona's expectations.</Rationale>
       </Message_Rating>
-    </EXAMPLE_OUTPUT>
+    </EXAMPLE_OUTPUT>    
+    <INPUTS>
+      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+      <Persona>${JSON.stringify(state.persona)}</Persona>
+      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
+      <Latest_Trainee_Message>${JSON.stringify(state.conversationHistory.filter(message => message instanceof HumanMessage).slice(-1)[0]?.content || "None")}</Latest_Trainee_Message>
+    </INPUTS>
   </INSTRUCTIONS>
 </Prompt>`
 }
@@ -285,12 +288,6 @@ var alternativeSuggestionsPromptXML = (state: typeof MessageRatingState.State) =
       <Rule>Provide a brief explanation (1-2 sentences) for each alternative, justifying why it improves on the trainee's message.</Rule>
       <Rule>Ensure suggestions enhance empathy, professionalism, or problem-solving relative to the trainee's message.</Rule>
     </RULES>
-    <INPUTS>
-      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
-      <Persona>${JSON.stringify(state.persona)}</Persona>
-      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
-      <Latest_Trainee_Message>${JSON.stringify(state.conversationHistory.filter(message => message instanceof HumanMessage).slice(-1)[0]?.content || "None")}</Latest_Trainee_Message>
-    </INPUTS>
     <OUTPUT_SCHEMA>
       <Alternative_Suggestions>
         <Suggestion>
@@ -310,14 +307,20 @@ var alternativeSuggestionsPromptXML = (state: typeof MessageRatingState.State) =
           <Explanation>This response acknowledges the guest's frustration and commits to a quick resolution, improving professionalism.</Explanation>
         </Suggestion>
       </Alternative_Suggestions>
-    </EXAMPLE_OUTPUT>
+    </EXAMPLE_OUTPUT>    
+    <INPUTS>
+      <Scenario>${JSON.stringify(state.scenario)}</Scenario>
+      <Persona>${JSON.stringify(state.persona)}</Persona>
+      <Conversation_History>${JSON.stringify(state.conversationHistory.map((message, index) => ({ index, role: message instanceof HumanMessage ? 'user' : 'ai', content: message.content })))}</Conversation_History>
+      <Latest_Trainee_Message>${JSON.stringify(state.conversationHistory.filter(message => message instanceof HumanMessage).slice(-1)[0]?.content || "None")}</Latest_Trainee_Message>
+    </INPUTS>
   </INSTRUCTIONS>
 </Prompt>`
 }
 
 // JSON PROMPT STARTING HERE
 
-var scenarioGeneratorPromptJSON = (state: typeof TrainingState.State) => {
+var scenarioGeneratorPromptJSON = (state: typeof ScenarioPersonaRefineState.State) => {
   return {
     SYSTEM: "You are the Scenario Generating Agent for a short-term rental (STR) virtual assistant (VA) training platform. Your role is to create realistic, structured training scenarios based on STR operations, such as guest communication, task management, vendor coordination, or policy enforcement.",
     INSTRUCTIONS: {
@@ -329,9 +332,6 @@ var scenarioGeneratorPromptJSON = (state: typeof TrainingState.State) => {
         "If a custom scenario is provided, expand it with necessary structure and details while preserving its core intent.",
         "Keep scenarios concise, relevant, and focused on VA training objectives."
       ],
-      INPUT: {
-        Custom_Scenario: state.customScenario || "None"
-      },
       OUTPUT_SCHEMA: {
         Scenario: {
           Scenario_Title: "string",
@@ -364,12 +364,15 @@ var scenarioGeneratorPromptJSON = (state: typeof TrainingState.State) => {
             "VA escalates refund request to manager correctly."
           ]
         }
-      }
+      },
+      INPUT: {
+        Custom_Scenario: state.customScenario || "None"
+      },
     }
   }
 }
 
-var personaGeneratorPromptJSON = (state: typeof TrainingState.State) => {
+var personaGeneratorPromptJSON = (state: typeof ScenarioPersonaRefineState.State) => {
   return {
     SYSTEM: "You are the Persona Generating Agent for an STR virtual assistant training platform. Your role is to create a realistic guest or vendor persona that aligns with the provided scenario, defining their behavior and communication style for the simulation.",
     INSTRUCTIONS: {
@@ -381,10 +384,6 @@ var personaGeneratorPromptJSON = (state: typeof TrainingState.State) => {
         "If a custom persona is provided, expand it with necessary structure while preserving its core intent.",
         "Keep persona descriptions concise, specific, and relevant to VA training."
       ],
-      INPUT: {
-        Scenario: state.scenario,
-        Custom_Persona: state.customPersona || "None"
-      },
       OUTPUT_SCHEMA: {
         Persona: {
           Name: "string",
@@ -417,7 +416,11 @@ var personaGeneratorPromptJSON = (state: typeof TrainingState.State) => {
             "Threatens negative review if unresolved"
           ]
         }
-      }
+      },
+      INPUT: {
+        Scenario: state.scenario,
+        Custom_Persona: state.customPersona || "None"
+      },
     }
   }
 }
@@ -436,17 +439,6 @@ var customerSimulatorPromptJSON = (state: typeof TrainingState.State) => {
         "Escalate only once, if necessary, and accept a clear resolution path afterward; do not prolong or contradict resolution unnecessarily.",
         "Keep responses concise, realistic, and aligned with STR operational context."
       ],
-      INPUTS: {
-        Scenario: state.scenario,
-        Persona: state.persona,
-        Conversation_History: state.conversationHistory.map((message, index) => {
-          return {
-            index,
-            role: message instanceof HumanMessage ? 'user' : 'ai',
-            content: message.content
-          }
-        })
-      },
       OUTPUT_SCHEMA: {
         Customer_Simulation: {
           Message: "string",
@@ -463,7 +455,18 @@ var customerSimulatorPromptJSON = (state: typeof TrainingState.State) => {
           ],
           Resolution_Accepted: false
         }
-      }
+      },
+      INPUTS: {
+        Scenario: state.scenario,
+        Persona: state.persona,
+        Conversation_History: state.conversationHistory.map((message, index) => {
+          return {
+            index,
+            role: message instanceof HumanMessage ? 'user' : 'ai',
+            content: message.content
+          }
+        })
+      },
     }
   }
 }
@@ -480,15 +483,6 @@ var feedbackGeneratorPromptJSON = (state: typeof TrainingState.State) => {
         "Provide concise, actionable suggestions focused on empathy, professionalism, and problem-solving in STR operations.",
         "Keep feedback objective, relevant, and aligned with the scenario's success criteria."
       ],
-      INPUTS: {
-        Scenario: state.scenario,
-        Persona: state.persona,
-        Conversation_History: state.conversationHistory.map((message, index) => ({
-          index,
-          role: message instanceof HumanMessage ? 'user' : 'ai',
-          content: message.content
-        }))
-      },
       OUTPUT_SCHEMA: {
         Training_Feedback: {
           Overall_Feedback: "string",
@@ -530,7 +524,16 @@ var feedbackGeneratorPromptJSON = (state: typeof TrainingState.State) => {
             "Use phrases like 'I understand how frustrating this is' to build rapport"
           ]
         }
-      }
+      },
+      INPUTS: {
+        Scenario: state.scenario,
+        Persona: state.persona,
+        Conversation_History: state.conversationHistory.map((message, index) => ({
+          index,
+          role: message instanceof HumanMessage ? 'user' : 'ai',
+          content: message.content
+        }))
+      },
     }
   }
 }
