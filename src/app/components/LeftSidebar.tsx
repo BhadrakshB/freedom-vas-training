@@ -12,7 +12,6 @@ import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { AuthStatus } from "./AuthStatus";
 import { UserThreadsList } from "./UserThreadsList";
-import { ThreadGroupManager } from "./ThreadGroupManager";
 import { useAuth } from "../contexts/AuthContext";
 import { useCoreAppData } from "../contexts/CoreAppDataContext";
 import type { UserThread } from "../lib/actions/user-threads-actions";
@@ -168,14 +167,12 @@ export function LeftSidebar({
           >
             {/* Auth Section */}
             <AuthStatus />
-
-            {/* Thread Group Manager */}
+            {/* Thread Group Manager
             {authState.user && (
               <div className="pb-2">
                 <ThreadGroupManager />
               </div>
-            )}
-
+            )} */}
             {/* Threads Section */}
             {authState.user && (
               <UserThreadsList
@@ -183,7 +180,6 @@ export function LeftSidebar({
                 selectedThreadId={selectedThreadId}
               />
             )}
-
             {children}
           </div>
         </div>

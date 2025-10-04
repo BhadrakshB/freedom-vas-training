@@ -1,6 +1,6 @@
 import { BaseMessage } from "@langchain/core/messages";
 import { MessageRatingSchema, AlternativeSuggestionsSchema } from "../agents/v2/graph_v2";
-import { ExtendedHumanMessageImpl } from "../../contexts/TrainingContext";
+import { ExtendedHumanMessageImpl } from "../../contexts/CoreAppDataContext";
 
 /**
  * Utility class to handle message feedback operations
