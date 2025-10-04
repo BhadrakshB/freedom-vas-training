@@ -31,6 +31,7 @@ import {
   FeedbackSchema,
   MessageRatingSchema,
   PersonaGeneratorSchema,
+  scenarioGeneratorSchema,
   ScenarioGeneratorSchema,
   TrainingStateType,
 } from "../lib/agents/v2/graph_v2";
@@ -121,8 +122,8 @@ interface CoreAppState {
   errorType: ErrorType | null;
   scenario?: ScenarioGeneratorSchema;
   persona?: PersonaGeneratorSchema;
-  customScenario: string | null;
-  customPersona: string | null;
+  customScenario: string | null | ScenarioGeneratorSchema;
+  customPersona: string | null | PersonaGeneratorSchema;
   isRefiningScenario: boolean;
   isRefiningPersona: boolean;
 
@@ -130,8 +131,8 @@ interface CoreAppState {
   bulkSessionConfig: {
     numberOfSessions: number;
     sessions: Array<{
-      customScenario: string | null;
-      customPersona: string | null;
+      customScenario: string | null | ScenarioGeneratorSchema;
+      customPersona: string | null | PersonaGeneratorSchema;
     }>;
   };
   isBulkSessionInProgress: boolean;
@@ -250,8 +251,12 @@ export interface CoreAppContextType {
   // Scenario and Persona actions
   setScenario: (scenario: ScenarioGeneratorSchema | null) => void;
   setPersona: (persona: PersonaGeneratorSchema | null) => void;
-  setCustomScenario: (customScenario: string | null) => void;
-  setCustomPersona: (customPersona: string | null) => void;
+  setCustomScenario: (
+    customScenario: string | null | ScenarioGeneratorSchema
+  ) => void;
+  setCustomPersona: (
+    customPersona: string | null | PersonaGeneratorSchema
+  ) => void;
   setIsRefiningScenario: (isRefining: boolean) => void;
   setIsRefiningPersona: (isRefining: boolean) => void;
 
@@ -259,7 +264,10 @@ export interface CoreAppContextType {
   setBulkSessionCount: (count: number) => void;
   updateBulkSessionConfig: (
     index: number,
-    config: { customScenario: string | null; customPersona: string | null }
+    config: {
+      customScenario: string | null | ScenarioGeneratorSchema;
+      customPersona: string | null | PersonaGeneratorSchema;
+    }
   ) => void;
   clearBulkSessionConfig: () => void;
 
@@ -288,6 +296,7 @@ export interface CoreAppContextType {
 
   // Bulk session functions
   handleStartBulkTraining: (groupId: string) => Promise<void>;
+  handleEndBulkTraining: (groupId: string) => Promise<void>;
 }
 
 // Create context
@@ -1012,19 +1021,25 @@ export function CoreAppDataProvider({
     }));
   }, []);
 
-  const setCustomScenario = useCallback((customScenario: string | null) => {
-    setState((prevState) => ({
-      ...prevState,
-      customScenario,
-    }));
-  }, []);
+  const setCustomScenario = useCallback(
+    (customScenario: string | null | ScenarioGeneratorSchema) => {
+      setState((prevState) => ({
+        ...prevState,
+        customScenario,
+      }));
+    },
+    []
+  );
 
-  const setCustomPersona = useCallback((customPersona: string | null) => {
-    setState((prevState) => ({
-      ...prevState,
-      customPersona,
-    }));
-  }, []);
+  const setCustomPersona = useCallback(
+    (customPersona: string | null | PersonaGeneratorSchema) => {
+      setState((prevState) => ({
+        ...prevState,
+        customPersona,
+      }));
+    },
+    []
+  );
 
   const setIsRefiningScenario = useCallback((isRefining: boolean) => {
     setState((prevState) => ({
@@ -1063,7 +1078,10 @@ export function CoreAppDataProvider({
   const updateBulkSessionConfig = useCallback(
     (
       index: number,
-      config: { customScenario: string | null; customPersona: string | null }
+      config: {
+        customScenario: string | null | ScenarioGeneratorSchema;
+        customPersona: string | null | PersonaGeneratorSchema;
+      }
     ) => {
       setState((prevState) => {
         const sessions = [...prevState.bulkSessionConfig.sessions];
@@ -1146,10 +1164,22 @@ export function CoreAppDataProvider({
         throw new Error("User not found in database. Please contact support.");
       }
 
-      // Call the training action with the current scenario and persona FIRST
+      // Determine which scenario and persona to use
+      // If customScenario/customPersona are schema objects, use them; otherwise use scenario/persona
+      const scenarioToUse =
+        typeof state.customScenario === "object" &&
+        state.customScenario !== null
+          ? state.customScenario
+          : state.scenario;
+      const personaToUse =
+        typeof state.customPersona === "object" && state.customPersona !== null
+          ? state.customPersona
+          : state.persona;
+
+      // Call the training action with the determined scenario and persona FIRST
       const result = await startTrainingSession({
-        scenario: state.scenario,
-        guestPersona: state.persona,
+        scenario: scenarioToUse,
+        guestPersona: personaToUse,
       });
 
       console.log(`result: ${result}`);
@@ -1171,8 +1201,8 @@ export function CoreAppDataProvider({
         title: threadTitle,
         userId: userAuth.userId, // Use the internal user ID, not Firebase UID
         visibility: "private",
-        scenario: result.scenario || state.scenario || {},
-        persona: result.guestPersona || state.persona || {},
+        scenario: result.scenario || scenarioToUse || {},
+        persona: result.guestPersona || personaToUse || {},
         status: "active",
         score: null,
         feedback: null,
@@ -1220,9 +1250,12 @@ export function CoreAppDataProvider({
           { thread: newThread, messages: savedMessages },
         ],
         activeThreadId: newThread.id,
-        // Update scenario and persona with the results from the workflow
-        scenario: result.scenario || prevState.scenario,
-        persona: result.guestPersona || prevState.persona,
+        // Move customScenario/customPersona to scenario/persona after training starts
+        scenario: result.scenario || scenarioToUse,
+        persona: result.guestPersona || personaToUse,
+        // Clear custom fields after moving to scenario/persona
+        customScenario: null,
+        customPersona: null,
       }));
 
       console.log(
@@ -1410,6 +1443,92 @@ export function CoreAppDataProvider({
           sortedMessages.length,
           "total messages"
         );
+
+        // Check if all threads in the group are completed and trigger group feedback if needed
+        if (result.status === "completed") {
+          console.log(
+            "Thread completed, checking if group feedback should be triggered..."
+          );
+
+          // Find the thread to get its groupId
+          const currentThread = state.userThreads.find(
+            (t) => t.thread.id === threadId
+          );
+
+          if (currentThread?.thread.groupId) {
+            const groupId = currentThread.thread.groupId;
+            console.log(
+              `Checking if all threads in group ${groupId} are completed...`
+            );
+
+            // Get all threads in the same group from local state
+            const groupThreads = state.userThreads.filter((t) => {
+              console.log(
+                `${t.thread.id} is completed? ${
+                  t.thread.status === "completed" ? "YES" : "NOT"
+                }`
+              );
+              return t.thread.groupId === groupId;
+            });
+
+            // Check if all threads are completed
+            const allCompleted = groupThreads.every((t) => {
+              if (t.thread.id === threadId) return true;
+              else {
+                return t.thread.status === "completed";
+              }
+            });
+
+            console.log(
+              `Group ${groupId} has ${groupThreads.length} threads, all completed: ${allCompleted}`
+            );
+
+            if (allCompleted) {
+              console.log(
+                `All threads in group ${groupId} are completed. Triggering group feedback...`
+              );
+
+              // Trigger group feedback generation asynchronously
+              (async () => {
+                try {
+                  const { endBulkTrainingSession } = await import(
+                    "../lib/actions/training-actions"
+                  );
+
+                  const feedbackResult = await endBulkTrainingSession({
+                    groupId,
+                  });
+
+                  if (feedbackResult.success) {
+                    console.log(
+                      "Group feedback generated successfully:",
+                      feedbackResult.groupFeedback
+                    );
+
+                    // Update the thread group with the feedback
+                    await updateThreadGroupData(groupId, {
+                      groupFeedback: feedbackResult.groupFeedback,
+                    });
+
+                    // Reload thread groups to reflect the updated feedback
+                    await loadThreadGroups();
+
+                    console.log(
+                      `Successfully updated group ${groupId} with feedback`
+                    );
+                  } else {
+                    console.error(
+                      "Failed to generate group feedback:",
+                      feedbackResult.error
+                    );
+                  }
+                } catch (err) {
+                  console.error("Error in group feedback generation:", err);
+                }
+              })();
+            }
+          }
+        }
       } catch (error) {
         console.error("Error updating training session:", error);
         const errorMessage =
@@ -1421,7 +1540,14 @@ export function CoreAppDataProvider({
         setLoading(false);
       }
     },
-    [authState.user, setLoading, setError]
+    [
+      authState.user,
+      setLoading,
+      setError,
+      state.userThreads,
+      updateThreadGroupData,
+      loadThreadGroups,
+    ]
   );
 
   const handleEndTraining = useCallback(
@@ -1553,7 +1679,7 @@ export function CoreAppDataProvider({
         // Only proceed with state updates if AI was successful
         if (result.refinedScenario) {
           console.log("AI scenario refinement successful, updating state...");
-          setScenario(result.refinedScenario);
+          setCustomScenario(result.refinedScenario);
           console.log("Refined scenario successfully");
         } else {
           throw new Error("No refined scenario returned from the service");
@@ -1599,7 +1725,7 @@ export function CoreAppDataProvider({
         // Only proceed with state updates if AI was successful
         if (result.refinedPersona) {
           console.log("AI persona refinement successful, updating state...");
-          setPersona(result.refinedPersona);
+          setCustomPersona(result.refinedPersona);
           console.log("Refined persona successfully");
         } else {
           throw new Error("No refined persona returned from the service");
@@ -1678,15 +1804,27 @@ export function CoreAppDataProvider({
             // Determine if we should use custom scenario/persona or generate new ones
             const shouldUseCustomScenario =
               sessionConfig.customScenario &&
-              sessionConfig.customScenario.trim().length > 0;
+              (typeof sessionConfig.customScenario === "string"
+                ? sessionConfig.customScenario.trim().length > 0
+                : true);
             const shouldUseCustomPersona =
               sessionConfig.customPersona &&
-              sessionConfig.customPersona.trim().length > 0;
+              (typeof sessionConfig.customPersona === "string"
+                ? sessionConfig.customPersona.trim().length > 0
+                : true);
 
             // Call the training action to start the session
             const result = await startTrainingSession({
-              scenario: shouldUseCustomScenario ? undefined : state.scenario,
-              guestPersona: shouldUseCustomPersona ? undefined : state.persona,
+              scenario: shouldUseCustomScenario
+                ? typeof sessionConfig.customScenario === "string"
+                  ? undefined // If it's a string, let AI refine it
+                  : sessionConfig.customScenario || undefined
+                : state.scenario,
+              guestPersona: shouldUseCustomPersona
+                ? typeof sessionConfig.customPersona === "string"
+                  ? undefined // If it's a string, let AI refine it
+                  : sessionConfig.customPersona || undefined
+                : state.persona,
             });
 
             if (result.error) {
@@ -1800,6 +1938,74 @@ export function CoreAppDataProvider({
     ]
   );
 
+  const handleEndBulkTraining = useCallback(
+    async (groupId: string) => {
+      if (!authState.user?.uid) {
+        setError("User must be logged in to end bulk training", "session");
+        return;
+      }
+
+      if (!groupId) {
+        setError("Group ID is required to end bulk training", "validation");
+        return;
+      }
+
+      setState((prevState) => ({
+        ...prevState,
+        isLoading: true,
+        error: null,
+      }));
+
+      try {
+        console.log(`Ending bulk training for group: ${groupId}`);
+
+        // Call the server action to generate group feedback
+        const { endBulkTrainingSession } = await import(
+          "../lib/actions/training-actions"
+        );
+
+        const result = await endBulkTrainingSession({ groupId });
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to generate group feedback");
+        }
+
+        console.log(
+          "Group feedback generated successfully:",
+          result.groupFeedback
+        );
+
+        // Update the thread group with the feedback
+        await updateThreadGroupData(groupId, {
+          groupFeedback: result.groupFeedback,
+        });
+
+        console.log(`Successfully updated group ${groupId} with feedback`);
+
+        // Reload thread groups to reflect the updated feedback
+        await loadThreadGroups();
+
+        setState((prevState) => ({
+          ...prevState,
+          isLoading: false,
+        }));
+      } catch (error) {
+        console.error("Error ending bulk training:", error);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Failed to end bulk training session";
+        setError(errorMessage, "session");
+
+        setState((prevState) => ({
+          ...prevState,
+          isLoading: false,
+        }));
+      }
+    },
+    [authState.user, setError, updateThreadGroupData, loadThreadGroups]
+  );
+
   const contextValue: CoreAppContextType = {
     state,
     setUserProfile,
@@ -1839,6 +2045,7 @@ export function CoreAppDataProvider({
     updateBulkSessionConfig,
     clearBulkSessionConfig,
     handleStartBulkTraining,
+    handleEndBulkTraining,
   };
 
   return (

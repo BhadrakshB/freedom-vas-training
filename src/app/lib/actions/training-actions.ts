@@ -620,3 +620,95 @@ export async function updateMessageFeedback(request: UpdateMessageFeedbackReques
     };
   }
 }
+
+interface EndBulkTrainingRequest {
+  groupId: string;
+}
+
+interface EndBulkTrainingResponse {
+  groupFeedback?: any;
+  success: boolean;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function endBulkTrainingSession(request: EndBulkTrainingRequest): Promise<EndBulkTrainingResponse> {
+  try {
+    // Validate required fields
+    if (!request.groupId || typeof request.groupId !== "string") {
+      throw new TrainingError(
+        "Group ID is required to end bulk training session",
+        'validation',
+        'medium',
+        'MISSING_GROUP_ID'
+      );
+    }
+
+    console.log(`Ending bulk training session for group: ${request.groupId}`);
+
+    // Import necessary functions
+    const { getThreadsByGroupId } = await import('../db/actions/thread-actions');
+    const { getMessagesByChatId } = await import('../db/actions/message-actions');
+    const { groupFeedbackWorkflow } = await import('../agents/v2/graph_v2');
+
+    // Fetch all threads in the group
+    const threads = await getThreadsByGroupId(request.groupId);
+
+    if (!threads || threads.length === 0) {
+      throw new TrainingError(
+        "No threads found in this group",
+        'validation',
+        'medium',
+        'NO_THREADS_IN_GROUP'
+      );
+    }
+
+    console.log(`Found ${threads.length} threads in group ${request.groupId}`);
+
+    // Fetch messages for each thread
+    const threadsWithMessages = await Promise.all(
+      threads.map(async (thread) => {
+        const messages = await getMessagesByChatId(thread.id);
+        return {
+          thread,
+          messages: messages || [],
+        };
+      })
+    );
+
+    console.log(`Fetched messages for all threads. Invoking group feedback workflow...`);
+
+    // Invoke the group feedback workflow
+    const result = await groupFeedbackWorkflow.invoke({
+      threads: threadsWithMessages,
+    });
+
+    console.log("=== GROUP FEEDBACK WORKFLOW RESULT ===");
+    console.log("Group Feedback:", result?.groupFeedback ? "Present" : "Not present");
+    console.log("===============================");
+
+    return {
+      groupFeedback: result?.groupFeedback,
+      success: true,
+    };
+
+  } catch (error) {
+    console.error("End bulk training session error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        success: false,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}

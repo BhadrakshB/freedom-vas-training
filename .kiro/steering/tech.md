@@ -1,78 +1,79 @@
 # Technology Stack
 
-## Framework & Runtime
-- **Next.js 15.5.0** with App Router and Turbopack
-- **React 19.1.0** with TypeScript
-- **Node.js** runtime environment
+## Core Framework
 
-## AI & ML Stack
-- **LangChain** (`@langchain/core`, `@langchain/langgraph`) for AI agent orchestration
-- **Google Gemini** (`@langchain/google-genai`) as primary LLM
-- **Pinecone** (`@pinecone-database/pinecone`) for vector database and RAG
-- **Zod** for schema validation and structured AI outputs
+- **Next.js 15.5.0**: App Router with Turbopack for fast builds
+- **React 19.1.0**: Latest React with server/client components
+- **TypeScript 5**: Strict mode enabled for type safety
 
-## Database & Authentication
-- **Neon PostgreSQL** as primary database
-- **Drizzle ORM** for type-safe database operations
-- **Firebase Authentication** for user management
-- **Firebase Admin SDK** for server-side auth operations
+## AI/ML Stack
 
-## UI & Styling
-- **Tailwind CSS v4** for styling with PostCSS
-- **Radix UI** components for accessible primitives
-- **shadcn/ui** component system
-- **Lucide React** for icons
-- **class-variance-authority** and **clsx** for conditional styling
-- **tailwind-merge** for class merging
+- **LangChain 0.3.31**: AI orchestration framework
+- **LangGraph 0.4.6**: State machine for multi-agent workflows
+- **Google Gemini**: LLM provider (gemini-1.5-flash, gemini-1.5-pro)
+- **Pinecone**: Vector database for RAG implementation
 
-## State Management
-- **React Context** with useState for training session state
-- **Custom hooks** for component logic encapsulation
-- **Server Actions** for type-safe server-side operations
+## Database & ORM
+
+- **Neon PostgreSQL**: Serverless PostgreSQL database
+- **Drizzle ORM 0.44.5**: Type-safe database queries
+- **Drizzle Kit 0.31.4**: Schema migrations
+
+## UI Components
+
+- **Tailwind CSS v4**: Utility-first styling
+- **Radix UI**: Accessible component primitives
+- **shadcn/ui**: Pre-built component library
+- **Lucide React**: Icon library
+
+## Authentication
+
+- **Firebase 12.2.1**: Client-side auth
+- **Firebase Admin 13.5.0**: Server-side auth verification
 
 ## Testing
-- **Vitest** for unit and integration testing
-- **Testing Library** for React component testing
-- **jsdom** for DOM simulation
-- **@vitest/ui** for test visualization
 
-## Development Tools
-- **ESLint** with Next.js config for code quality
-- **TypeScript** with strict mode for type safety
-- **pnpm** for package management
-- **Bundle Analyzer** for build optimization
-- **tsx** for TypeScript execution
+- **Vitest 3.2.4**: Unit and integration testing
+- **Testing Library**: React component testing
+- **jsdom**: DOM environment for tests
+
+## Package Manager
+
+- **pnpm**: Fast, disk-efficient package manager
 
 ## Common Commands
 
 ```bash
 # Development
 pnpm dev              # Start dev server with Turbopack
-pnpm build            # Build for production with Turbopack
+pnpm build            # Build for production
 pnpm start            # Start production server
+
+# Database
+pnpm db:generate      # Generate migrations
+pnpm db:push          # Push schema changes
+pnpm db:studio        # Open Drizzle Studio
 
 # Testing
 pnpm test             # Run tests in watch mode
 pnpm test:run         # Run tests once
+pnpm test:ui          # Open Vitest UI
 
 # Code Quality
 pnpm lint             # Run ESLint
-
-# Database
-npx drizzle-kit generate    # Generate migrations
-npx drizzle-kit migrate     # Run migrations
-npx drizzle-kit studio      # Open Drizzle Studio
 ```
 
-## Path Aliases
-- `@/*` → `./src/*`
-- `@/app/*` → `./src/app/*`
-- `@/components/*` → `./src/app/components/*`
-- `@/lib/*` → `./src/app/lib/*`
-
 ## Environment Variables
-- `NEXT_PUBLIC_FIREBASE_*` - Firebase client configuration
-- `FIREBASE_*` - Firebase admin configuration
-- `NEXT_PUBLIC_NEON_DATABASE_URL` - PostgreSQL connection string
-- `GOOGLE_API_KEY` - Google Gemini API key
-- `PINECONE_*` - Pinecone vector database configuration
+
+Required environment variables:
+- `GOOGLE_API_KEY`: Google Gemini API key
+- `PINECONE_API_KEY`: Pinecone vector database key
+- `PINECONE_INDEX_NAME`: Pinecone index name
+- `DATABASE_URL`: Neon PostgreSQL connection string
+- Firebase configuration variables (client and admin)
+
+## Build Configuration
+
+- **Turbopack**: Enabled for dev and build
+- **Bundle Analyzer**: Available with `ANALYZE=true`
+- **Package Optimization**: Radix UI and Lucide React optimized

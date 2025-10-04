@@ -1,17 +1,23 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Sparkles } from "lucide-react";
+import {
+  PersonaGeneratorSchema,
+  ScenarioGeneratorSchema,
+} from "../lib/agents/v2/graph_v2";
 
 export interface SessionConfiguration {
   id: string;
   title: string;
-  scenario?: string;
-  persona?: string;
+  scenario?: ScenarioGeneratorSchema;
+  persona?: PersonaGeneratorSchema;
+  customScenario: string | null | ScenarioGeneratorSchema;
+  customPersona: string | null | PersonaGeneratorSchema;
 }
 
 export interface BulkSessionGroup {
@@ -35,6 +41,8 @@ interface BulkSessionCreationProps {
   onAddConfiguration: () => void;
   onGroupNameChange: (groupName: string) => void;
   onStartAllSessions: () => void;
+  onRefineScenario?: (sessionId: string, scenario: string) => Promise<void>;
+  onRefinePersona?: (sessionId: string, persona: string) => Promise<void>;
 }
 
 export function BulkSessionCreation({
@@ -50,7 +58,47 @@ export function BulkSessionCreation({
   onAddConfiguration,
   onGroupNameChange,
   onStartAllSessions,
+  onRefineScenario,
+  onRefinePersona,
 }: BulkSessionCreationProps) {
+  // Track which sessions are being refined
+  const [refiningScenarios, setRefiningScenarios] = useState<Set<string>>(
+    new Set()
+  );
+  const [refiningPersonas, setRefiningPersonas] = useState<Set<string>>(
+    new Set()
+  );
+
+  const handleRefineScenario = async (sessionId: string, scenario: string) => {
+    if (!onRefineScenario || !scenario.trim()) return;
+
+    setRefiningScenarios((prev) => new Set(prev).add(sessionId));
+    try {
+      await onRefineScenario(sessionId, scenario);
+    } finally {
+      setRefiningScenarios((prev) => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  };
+
+  const handleRefinePersona = async (sessionId: string, persona: string) => {
+    if (!onRefinePersona || !persona.trim()) return;
+
+    setRefiningPersonas((prev) => new Set(prev).add(sessionId));
+    try {
+      await onRefinePersona(sessionId, persona);
+    } finally {
+      setRefiningPersonas((prev) => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  };
+
   if (!show) return null;
 
   return (
@@ -163,43 +211,125 @@ export function BulkSessionCreation({
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor={`scenario-${config.id}`}>
-                          Custom Scenario (Optional)
-                        </Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor={`scenario-${config.id}`}>
+                            Custom Scenario (Optional)
+                          </Label>
+                          {onRefineScenario && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const scenarioText =
+                                  typeof config.customScenario === "string"
+                                    ? config.customScenario
+                                    : config.customScenario
+                                    ? JSON.stringify(config.customScenario)
+                                    : "";
+                                handleRefineScenario(config.id, scenarioText);
+                              }}
+                              disabled={
+                                isCreatingBulkSessions ||
+                                refiningScenarios.has(config.id) ||
+                                !config.customScenario
+                              }
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              {refiningScenarios.has(config.id)
+                                ? "Refining..."
+                                : "Refine"}
+                            </Button>
+                          )}
+                        </div>
                         <textarea
                           id={`scenario-${config.id}`}
-                          className="w-full min-h-[80px] p-3 border border-input bg-background rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                          value={config.scenario}
+                          className="w-full min-h-[80px] p-3 border border-input bg-background rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          value={
+                            typeof config.customScenario === "string"
+                              ? config.customScenario
+                              : config.customScenario
+                              ? JSON.stringify(config.customScenario, null, 2)
+                              : ""
+                          }
                           onChange={(e) =>
                             onConfigurationChange(
                               config.id,
-                              "scenario",
+                              "customScenario",
                               e.target.value
                             )
                           }
-                          placeholder="Leave blank for AI-generated scenario or enter custom scenario details..."
-                          disabled={isCreatingBulkSessions}
+                          placeholder="e.g., Guest complaining about noise from neighboring unit..."
+                          disabled={
+                            isCreatingBulkSessions ||
+                            refiningScenarios.has(config.id)
+                          }
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Leave blank for AI-generated scenario or use the
+                          refine button to enhance your input
+                        </p>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor={`persona-${config.id}`}>
-                          Custom Persona (Optional)
-                        </Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor={`persona-${config.id}`}>
+                            Custom Persona (Optional)
+                          </Label>
+                          {onRefinePersona && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const personaText =
+                                  typeof config.customPersona === "string"
+                                    ? config.customPersona
+                                    : config.customPersona
+                                    ? JSON.stringify(config.customPersona)
+                                    : "";
+                                handleRefinePersona(config.id, personaText);
+                              }}
+                              disabled={
+                                isCreatingBulkSessions ||
+                                refiningPersonas.has(config.id) ||
+                                !config.customPersona
+                              }
+                              className="h-7 px-2 text-xs"
+                            >
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              {refiningPersonas.has(config.id)
+                                ? "Refining..."
+                                : "Refine"}
+                            </Button>
+                          )}
+                        </div>
                         <textarea
                           id={`persona-${config.id}`}
-                          className="w-full min-h-[80px] p-3 border border-input bg-background rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                          value={config.persona}
+                          className="w-full min-h-[80px] p-3 border border-input bg-background rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          value={
+                            typeof config.customPersona === "string"
+                              ? config.customPersona
+                              : config.customPersona
+                              ? JSON.stringify(config.customPersona, null, 2)
+                              : ""
+                          }
                           onChange={(e) =>
                             onConfigurationChange(
                               config.id,
-                              "persona",
+                              "customPersona",
                               e.target.value
                             )
                           }
-                          placeholder="Leave blank for AI-generated persona or enter custom persona details..."
-                          disabled={isCreatingBulkSessions}
+                          placeholder="e.g., Frustrated business traveler, first-time Airbnb user..."
+                          disabled={
+                            isCreatingBulkSessions ||
+                            refiningPersonas.has(config.id)
+                          }
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Leave blank for AI-generated persona or use the refine
+                          button to enhance your input
+                        </p>
                       </div>
                     </CardContent>
                   </Card>

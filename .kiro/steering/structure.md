@@ -2,86 +2,92 @@
 
 ## Directory Organization
 
-### `/src/app` - Next.js App Router Structure
-- **`/adapters`** - External service integrations
-  - `/firebase` - Firebase client and admin configurations
-- **`/auth`** - Authentication pages and components
-- **`/components`** - React components organized by feature
-  - `/ui` - shadcn/ui base components (Button, Card, Dialog, etc.)
-  - Feature components (TrainingPanel, FeedbackDisplay, MessageArea, etc.)
-  - `index.ts` - Barrel exports for clean imports
-- **`/contexts`** - React Context providers
-  - `AuthContext.tsx` - Firebase authentication state
-  - `CoreAppDataContext.tsx` - Application data management
-  - `ThemeContext.tsx` - Theme management
-  - `TrainingContext.tsx` - Training session state management
-- **`/hooks`** - Custom React hooks
-  - `useAuthListener.ts` - Firebase auth state listener
-- **`/lib`** - Core business logic and utilities
-  - `/actions` - Next.js Server Actions for type-safe server operations
-  - `/agents` - AI agent implementations with LangGraph workflows
-    - `/v2` - Current agent implementation (graph_v2.ts, prompts.ts, etc.)
-  - `/db` - Database layer with Drizzle ORM
-    - `/actions` - Database operations (CRUD)
-    - `schema.ts` - Database schema definitions
-  - `/hooks` - Server-side hooks and utilities
-  - `/rag-tools` - RAG implementation with Pinecone
-  - `/types` - TypeScript type definitions
-  - Core utilities (validation, error-handling, utils)
+```
+src/app/
+├── adapters/          # External service adapters (Firebase)
+├── api/               # API route handlers
+│   ├── messages/      # Message CRUD operations
+│   ├── threads/       # Thread management
+│   ├── threadgroups/  # Thread group operations
+│   └── training/      # Training session endpoints
+├── auth/              # Authentication pages
+├── components/        # React components
+│   ├── ui/           # Base UI components (shadcn/ui)
+│   └── examples/     # Example implementations
+├── contexts/          # React Context providers
+├── hooks/             # Custom React hooks
+└── lib/               # Core business logic
+    ├── actions/       # Next.js Server Actions
+    ├── agents/        # AI agent implementations
+    │   └── v2/       # Current agent version
+    ├── api/          # API client utilities
+    ├── db/           # Database schema and queries
+    │   └── actions/  # Database operations
+    ├── rag-tools/    # RAG and document processing
+    ├── types/        # TypeScript type definitions
+    └── utils/        # Utility functions
+```
 
-### Key Architectural Patterns
+## Key Conventions
 
-#### Component Organization
-- **Barrel Exports**: Use `index.ts` files for clean component imports
-- **Feature Grouping**: Components grouped by functionality, not technical concerns
-- **UI Separation**: Base UI components in `/ui`, feature components at root level
-- **Specialized Components**: AuthStatus, ProtectedRoute, CollapsiblePanel for specific features
+### Import Aliases
 
-#### State Management
-- **Context + useState**: Training state managed via TrainingContext with useState hooks
-- **Typed Actions**: All state updates through typed action functions
-- **Multi-Context Architecture**: Separate contexts for auth, theme, training, and core app data
-- **Extended Message Types**: Custom ExtendedHumanMessage with rating and suggestions
+- `@/*`: Root src directory
+- `@/app/*`: App directory
+- `@/components/*`: Components directory
+- `@/lib/*`: Lib directory
 
-#### Data Layer
-- **Server Actions**: Type-safe server operations replacing API routes
-- **Database Actions**: Separate CRUD operations for each entity (users, threads, messages)
-- **Drizzle ORM**: Type-safe database operations with PostgreSQL
-- **Firebase Integration**: Authentication with both client and admin SDKs
+### Component Organization
 
-#### AI Agent Architecture
-- **LangGraph State Management**: StateGraph with typed annotations for agent workflows
-- **Structured Outputs**: Zod schemas for all AI responses (scenarios, personas, feedback)
-- **Multi-Agent System**: Separate agents for customer simulation, scenario generation, persona creation, and feedback
-- **RAG Integration**: Pinecone service with document processing and embedding
+- **UI Components**: Base components in `components/ui/` (shadcn/ui pattern)
+- **Feature Components**: Domain-specific components in `components/`
+- **Barrel Exports**: Use `index.ts` for clean imports
 
-#### Type Safety
-- **Centralized Types**: All interfaces in `/lib/types.ts`
-- **Strict TypeScript**: Full type coverage with strict mode enabled
-- **Schema Validation**: Zod schemas for runtime type checking
-- **Database Types**: Inferred types from Drizzle schema
+### Server Actions vs API Routes
 
-#### Testing Strategy
-- **Vitest Configuration**: Custom config with jsdom environment
-- **Component Tests**: React Testing Library for UI components
-- **Test Setup**: Centralized configuration in `src/test-setup.ts`
-- **Path Aliases**: Consistent alias resolution in tests
+- **Prefer Server Actions**: Located in `lib/actions/` for type-safe server operations
+- **API Routes**: Used for external integrations or streaming responses
+- **Error Handling**: Return error objects, don't throw HTTP errors
 
-### File Naming Conventions
-- **Components**: PascalCase (e.g., `TrainingPanel.tsx`, `MessageArea.tsx`)
-- **Utilities**: kebab-case (e.g., `error-handling.ts`, `document-processor.ts`)
-- **Database**: kebab-case (e.g., `user-actions.ts`, `thread-actions.ts`)
-- **Actions**: kebab-case with suffix (e.g., `training-actions.ts`, `message-actions.ts`)
-- **Tests**: `*.test.tsx` or `*.test.ts`
+### Database Patterns
 
-### Import Patterns
-- Use path aliases (`@/components/*`, `@/lib/*`) for internal imports
-- Barrel exports for component collections and actions
-- Explicit imports for utilities and types
-- Context imports from centralized index files
+- **Schema**: Single source of truth in `lib/db/schema.ts`
+- **Actions**: Database operations in `lib/db/actions/`
+- **Migrations**: Generated in `drizzle/` directory
+- **Type Inference**: Use `InferSelectModel` for type safety
 
-### Database Schema
-- **User Management**: User table with separate UserAuth for multiple providers
-- **Thread System**: Conversation threads linked to users
-- **Message Storage**: Individual messages within threads
-- **Training Sessions**: Structured training data with scenarios and personas
+### AI Agent Architecture
+
+- **LangGraph**: State machine orchestration in `lib/agents/v2/graph_v2.ts`
+- **Agents**: Individual agent implementations (scenario creator, persona generator, guest simulator, etc.)
+- **Prompts**: Centralized in `lib/agents/v2/prompts.ts`
+- **Tools**: Agent tools in `lib/agents/v2/tools.ts`
+- **RAG**: Vector search in `lib/agents/v2/rags.ts`
+
+### State Management
+
+- **React Context**: Global state in `contexts/`
+- **useReducer**: Complex state logic
+- **Server State**: Managed via Server Actions
+- **Polling**: Used for real-time updates (training status)
+
+### Styling
+
+- **Tailwind CSS v4**: Utility-first approach
+- **CSS Variables**: Theme tokens in `globals.css`
+- **Component Variants**: Use `class-variance-authority` (cva)
+- **Utility Function**: `cn()` from `lib/utils.ts` for conditional classes
+
+### File Naming
+
+- **Components**: PascalCase (e.g., `TrainingPanel.tsx`)
+- **Utilities**: kebab-case (e.g., `message-feedback-handler.ts`)
+- **Actions**: kebab-case with suffix (e.g., `training-actions.ts`)
+- **Types**: Singular (e.g., `types.ts`)
+
+### Documentation
+
+- **Implementation Docs**: Root-level markdown files (e.g., `BULK_SESSION_IMPLEMENTATION.md`)
+- **Architecture Docs**: In `docs/` directory
+- **Component Docs**: Co-located with complex components
+- **API Docs**: In respective action/route directories

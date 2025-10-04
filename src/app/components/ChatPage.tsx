@@ -20,7 +20,16 @@ export function ChatPage() {
   const [showBulkCreation, setShowBulkCreation] = useState(false);
   const [sessionConfigurations, setSessionConfigurations] = useState<
     SessionConfiguration[]
-  >([{ id: "1", title: "Session 1", scenario: "", persona: "" }]);
+  >([
+    {
+      id: "1",
+      title: "Session 1",
+      scenario: undefined,
+      persona: undefined,
+      customScenario: null,
+      customPersona: null,
+    },
+  ]);
   const [groupName, setGroupName] = useState("");
 
   // Add global mouse event listeners for resizing
@@ -82,8 +91,10 @@ export function ChatPage() {
           existingConfig || {
             id: i.toString(),
             title: `Session ${i}`,
-            scenario: "",
-            persona: "",
+            scenario: undefined,
+            persona: undefined,
+            customScenario: null,
+            customPersona: null,
           }
         );
       }
@@ -102,12 +113,13 @@ export function ChatPage() {
 
       // Update CoreAppDataContext with scenario/persona changes
       const index = parseInt(id) - 1;
-      if (field === "scenario" || field === "persona") {
+      if (field === "customScenario" || field === "customPersona") {
         const config = sessionConfigurations.find((c) => c.id === id);
         updateBulkSessionConfig(index, {
           customScenario:
-            field === "scenario" ? value : config?.scenario || null,
-          customPersona: field === "persona" ? value : config?.persona || null,
+            field === "customScenario" ? value : config?.customScenario || null,
+          customPersona:
+            field === "customPersona" ? value : config?.customPersona || null,
         });
       }
     },
@@ -128,11 +140,13 @@ export function ChatPage() {
 
   const handleAddConfiguration = useCallback(() => {
     const newId = (sessionConfigurations.length + 1).toString();
-    const newConfig = {
+    const newConfig: SessionConfiguration = {
       id: newId,
       title: `Session ${sessionConfigurations.length + 1}`,
-      scenario: "",
-      persona: "",
+      scenario: undefined,
+      persona: undefined,
+      customScenario: null,
+      customPersona: null,
     };
     setSessionConfigurations((prev) => [...prev, newConfig]);
     setBulkSessionCount(sessionConfigurations.length + 1);
@@ -141,6 +155,80 @@ export function ChatPage() {
   const handleGroupNameChange = useCallback((name: string) => {
     setGroupName(name);
   }, []);
+
+  const handleRefineScenario = useCallback(
+    async (sessionId: string, scenario: string) => {
+      try {
+        const { refineScenario } = await import(
+          "../lib/actions/training-actions"
+        );
+        const result = await refineScenario({ scenario });
+
+        if (result.refinedScenario) {
+          // Update the configuration with the refined scenario
+          setSessionConfigurations((prev) =>
+            prev.map((config) =>
+              config.id === sessionId
+                ? ({
+                    ...config,
+                    scenario: result.refinedScenario,
+                    customScenario: result.refinedScenario,
+                  } as SessionConfiguration)
+                : config
+            )
+          );
+
+          // Also update the context
+          const index = parseInt(sessionId) - 1;
+          const config = sessionConfigurations.find((c) => c.id === sessionId);
+          updateBulkSessionConfig(index, {
+            customScenario: result.refinedScenario,
+            customPersona: config?.customPersona || null,
+          });
+        }
+      } catch (error) {
+        console.error("Error refining scenario:", error);
+      }
+    },
+    [sessionConfigurations, updateBulkSessionConfig]
+  );
+
+  const handleRefinePersona = useCallback(
+    async (sessionId: string, persona: string) => {
+      try {
+        const { refinePersona } = await import(
+          "../lib/actions/training-actions"
+        );
+        const result = await refinePersona({ persona });
+
+        if (result.refinedPersona) {
+          // Update the configuration with the refined persona
+          setSessionConfigurations((prev) =>
+            prev.map((config) =>
+              config.id === sessionId
+                ? ({
+                    ...config,
+                    persona: result.refinedPersona,
+                    customPersona: result.refinedPersona,
+                  } as SessionConfiguration)
+                : config
+            )
+          );
+
+          // Also update the context
+          const index = parseInt(sessionId) - 1;
+          const config = sessionConfigurations.find((c) => c.id === sessionId);
+          updateBulkSessionConfig(index, {
+            customScenario: config?.customScenario || null,
+            customPersona: result.refinedPersona,
+          });
+        }
+      } catch (error) {
+        console.error("Error refining persona:", error);
+      }
+    },
+    [sessionConfigurations, updateBulkSessionConfig]
+  );
 
   const handleStartAllSessions = async () => {
     try {
@@ -154,8 +242,8 @@ export function ChatPage() {
       // Sync configurations to CoreAppDataContext
       sessionConfigurations.forEach((config, index) => {
         updateBulkSessionConfig(index, {
-          customScenario: config.scenario || null,
-          customPersona: config.persona || null,
+          customScenario: config.customScenario || null,
+          customPersona: config.customPersona || null,
         });
       });
 
@@ -165,7 +253,14 @@ export function ChatPage() {
       // Reset UI state
       setShowBulkCreation(false);
       setSessionConfigurations([
-        { id: "1", title: "Session 1", scenario: "", persona: "" },
+        {
+          id: "1",
+          title: "Session 1",
+          scenario: undefined,
+          persona: undefined,
+          customScenario: null,
+          customPersona: null,
+        },
       ]);
       setGroupName("");
       clearBulkSessionConfig();
@@ -247,6 +342,8 @@ export function ChatPage() {
         onAddConfiguration={handleAddConfiguration}
         onGroupNameChange={handleGroupNameChange}
         onStartAllSessions={handleStartAllSessions}
+        onRefineScenario={handleRefineScenario}
+        onRefinePersona={handleRefinePersona}
       />
     </div>
   );

@@ -50,8 +50,8 @@ export function TrainingPanels() {
       ? (activeThread.thread.persona as PersonaGeneratorSchema)
       : (state.persona as PersonaGeneratorSchema) ?? null;
 
-  const customScenario = state.customScenario || "";
-  const customPersona = state.customPersona || "";
+  const customScenario = state.customScenario;
+  const customPersona = state.customPersona;
   const isRefiningScenario = state.isRefiningScenario;
   const isRefiningPersona = state.isRefiningPersona;
   const isLoading = state.isLoading;
@@ -67,13 +67,21 @@ export function TrainingPanels() {
 
   const handleRefineScenarioClick = async () => {
     if (customScenario) {
-      await handleRefineScenario(customScenario);
+      const scenarioText =
+        typeof customScenario === "string"
+          ? customScenario
+          : JSON.stringify(customScenario);
+      await handleRefineScenario(scenarioText);
     }
   };
 
   const handleRefinePersonaClick = async () => {
     if (customPersona) {
-      await handleRefinePersona(customPersona);
+      const personaText =
+        typeof customPersona === "string"
+          ? customPersona
+          : JSON.stringify(customPersona);
+      await handleRefinePersona(personaText);
     }
   };
 
