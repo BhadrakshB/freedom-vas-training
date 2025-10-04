@@ -123,7 +123,7 @@ Knowledge retrieval is integrated into scenario generation, silent scoring, and 
 Key environment variables:
 - `GOOGLE_API_KEY`: Google Gemini API access
 - `PINECONE_API_KEY`: Vector database access
-- `NEON_DATABASE_URL`: PostgreSQL database connection
+- `NEXT_PUBLIC_NEON_DATABASE_URL`: PostgreSQL database connection
 - Firebase configuration for authentication
 
 ### Testing Strategy

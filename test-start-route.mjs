@@ -1,5 +1,5 @@
 // Simple test to verify the start route functionality
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 
 async function testStartRoute() {
   try {
@@ -45,8 +45,8 @@ async function testStartRoute() {
 }
 
 // Only run if this file is executed directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   testStartRoute();
 }
 
-module.exports = { testStartRoute };
+export { testStartRoute };

@@ -48,12 +48,30 @@ export function PersonaDisplayPanel({
           <p className="text-sm">{persona.communication_style}</p>
         </div>
         
-        {persona.personality_traits && (
+        {persona.personality_traits && persona.personality_traits.length > 0 && (
           <div>
             <h4 className="text-xs font-medium text-muted-foreground mb-1">
               Personality Traits
             </h4>
-            <p className="text-sm">{persona.personality_traits}</p>
+            <p className="text-sm">{persona.personality_traits.join(', ')}</p>
+          </div>
+        )}
+        
+        {persona.expectations && persona.expectations.length > 0 && (
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-1">
+              Expectations
+            </h4>
+            <p className="text-sm">{persona.expectations.join(', ')}</p>
+          </div>
+        )}
+        
+        {persona.escalation_behavior && persona.escalation_behavior.length > 0 && (
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-1">
+              Escalation Behavior
+            </h4>
+            <p className="text-sm">{persona.escalation_behavior.join(', ')}</p>
           </div>
         )}
       </div>

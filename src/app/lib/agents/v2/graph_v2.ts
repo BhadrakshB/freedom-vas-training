@@ -1,4 +1,4 @@
-import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, HumanMessage, MessageContent } from "@langchain/core/messages";
 import {
   Annotation,
   END,
@@ -10,7 +10,9 @@ import {
 import * as z from "zod";
 import { customerLLM, feedbackLLM, personaLLM, scenarioLLM } from "./llms";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { customerSimulatorPromptJSON, customerSimulatorPromptXML, feedbackGeneratorPromptXML, personaGeneratorPromptXML, scenarioGeneratorPromptXML } from "./prompts";
+import { alternativeSuggestionsPromptXML, customerSimulatorPromptJSON, customerSimulatorPromptXML, feedbackGeneratorPromptXML, messageRatingPromptXML, personaGeneratorPromptXML, scenarioGeneratorPromptXML } from "./prompts";
+import { DBMessage, Thread, ThreadGroup } from "../../db/schema";
+import { ThreadWithMessages } from "@/app/contexts/CoreAppDataContext";
 
 
 export const baseLLMSchema = z.object({}); // Empty by default
@@ -81,8 +83,6 @@ export const TrainingState = Annotation.Root({
   ),
   status: Annotation<TrainingStateType>(),
   feedback: Annotation<FeedbackSchema>(),
-  customScenario: Annotation<string>(),
-  customPersona: Annotation<string>(),
 });
 
 // --- Define the makeAgentNode Factory Function ---
@@ -272,17 +272,17 @@ const makeRefineAgentNodes = <T>({
   returnFunction,
 }: {
   name: string;
-  systemPrompt: (state: typeof ScenarioState.State) => string;
+  systemPrompt: (state: typeof ScenarioPersonaRefineState.State) => string;
   responseSchema: z.ZodType<T>;
   model: ChatGoogleGenerativeAI;
   returnFunction: (
-    state: typeof ScenarioState.State,
+    state: typeof ScenarioPersonaRefineState.State,
     response: any
-  ) => Partial<typeof ScenarioState.State>;
+  ) => Partial<typeof ScenarioPersonaRefineState.State>;
 }) => {
   return async function (
-    state: typeof ScenarioState.State
-  ): Promise<Partial<typeof ScenarioState.State>> {
+    state: typeof ScenarioPersonaRefineState.State
+  ): Promise<Partial<typeof ScenarioPersonaRefineState.State>> {
     console.log(`-> Agent ${name} is invoked...`);
     const myModel = model.withStructuredOutput(responseSchema);
     const prompt = systemPrompt(state);
@@ -297,7 +297,7 @@ const makeRefineAgentNodes = <T>({
   };
 };
 
-const ScenarioState = Annotation.Root({
+export const ScenarioPersonaRefineState = Annotation.Root({
   scenario: Annotation<ScenarioGeneratorSchema>(),
   persona: Annotation<PersonaGeneratorSchema>(),
   flag: Annotation<'scenario' | 'persona'>(),
@@ -309,7 +309,7 @@ const scenarioRefiner = makeRefineAgentNodes({
   name: "Scenario_Refiner",
   responseSchema: scenarioGeneratorSchema,
   model: scenarioLLM, // Same model as scenarioGenerator
-  systemPrompt: (state: typeof ScenarioState.State) => `
+  systemPrompt: (state: typeof ScenarioPersonaRefineState.State) => `
 <SYSTEM>
 You are the <ROLE>Scenario Refinement Agent</ROLE>.  
 Your task is to take the user's raw input describing a short-term rental (STR) guest situation and transform it into a fully structured, detailed, and correct training scenario.  
@@ -340,7 +340,7 @@ Make it professional, realistic, and aligned with the scenario schema.
   </OUTPUT_SCHEMA>
 </INSTRUCTIONS>
 `,
-  returnFunction: function (state: typeof ScenarioState.State, response: any) {
+  returnFunction: function (state: typeof ScenarioPersonaRefineState.State, response: any) {
     return {
       ...state,
       scenario: response,
@@ -353,7 +353,7 @@ const personaRefiner = makeRefineAgentNodes({
   name: "Persona_Refiner",
   responseSchema: personaGeneratorSchema,
   model: personaLLM, // Same model as personaGenerator
-  systemPrompt: (state: typeof ScenarioState.State) => `
+  systemPrompt: (state: typeof ScenarioPersonaRefineState.State) => `
 <SYSTEM>
 You are the <ROLE>Persona Refinement Agent</ROLE>.  
 Your task is to take the user's raw input describing a guest or vendor persona and transform it into a fully structured, detailed, and realistic training persona.  
@@ -384,7 +384,7 @@ Ensure the output aligns with the structured schema and reflects realistic trait
   </OUTPUT_SCHEMA>
 </INSTRUCTIONS>
 `,
-  returnFunction: function (state: typeof ScenarioState.State, response: any) {
+  returnFunction: function (state: typeof ScenarioPersonaRefineState.State, response: any) {
     return {
       ...state,
       persona: response,
@@ -394,12 +394,12 @@ Ensure the output aligns with the structured schema and reflects realistic trait
 });
 
 
-export const scenarioPersonaRefineWorkflow = new StateGraph(ScenarioState)
+export const scenarioPersonaRefineWorkflow = new StateGraph(ScenarioPersonaRefineState)
   .addNode("scenario_refiner", scenarioRefiner)
   .addNode("persona_refiner", personaRefiner)
   .addConditionalEdges(
     START,
-    (state: StateType<typeof ScenarioState.spec>) => {
+    (state: StateType<typeof ScenarioPersonaRefineState.spec>) => {
       if (state.flag === "scenario") return "scenario_refiner";
       if (state.flag === "persona") return "persona_refiner";
       return END
@@ -413,4 +413,276 @@ export const scenarioPersonaRefineWorkflow = new StateGraph(ScenarioState)
   .addEdge("scenario_refiner", END)
   .addEdge("persona_refiner", END)
   .addEdge(START, END)
+  .compile();
+
+
+
+// ============================================================================
+// MESSAGE RATING AND SUGGESTIONS WORKFLOW
+// ============================================================================
+
+// Schema for message rating
+export const messageRatingSchema = z.object({
+  Message_Rating: z.object({
+    Rating: z.number().int().min(0).max(10, {
+      message: 'Rating must be an integer between 0 and 10',
+    }),
+    Rationale: z.string().min(1, {
+      message: 'Rationale must be a non-empty string',
+    }),
+  }),
+});
+export type MessageRatingSchema = z.infer<typeof messageRatingSchema>;
+
+export const alternativeSuggestionsSchema = z.object({
+  Alternative_Suggestions: z
+    .array(
+      z.object({
+        Response: z.string().min(1, {
+          message: 'Response must be a non-empty string',
+        }),
+        Explanation: z.string().min(1, {
+          message: 'Explanation must be a non-empty string',
+        }),
+      }),
+    )
+    .min(0, {
+      message: 'If a message is appropriate, no suggestion is necessary',
+    })
+    .max(3, {
+      message: 'No more than three suggestions are allowed',
+    }),
+});
+
+export type AlternativeSuggestionsSchema = z.infer<typeof alternativeSuggestionsSchema>;
+
+
+// State for message rating workflow
+export const MessageRatingState = Annotation.Root({
+  conversationHistory: Annotation<BaseMessage[]>({
+    reducer: messagesStateReducer,
+    default: () => [],
+  }),
+  latestUserMessage: Annotation<MessageContent>(),
+  scenario: Annotation<ScenarioGeneratorSchema | null>(),
+  persona: Annotation<PersonaGeneratorSchema | null>(),
+  rating: Annotation<MessageRatingSchema | null>(),
+  suggestions: Annotation<AlternativeSuggestionsSchema | null>(),
+  shouldProvideAlternatives: Annotation<boolean>()
+});
+
+const makeMessageRatingAgentNodes = <T>({
+  name,
+  systemPrompt,
+  responseSchema,
+  model,
+  returnFunction,
+}: {
+  name: string;
+  systemPrompt: (state: typeof MessageRatingState.State) => string;
+  responseSchema: z.ZodType<T>;
+  model: ChatGoogleGenerativeAI;
+  returnFunction: (
+    state: typeof MessageRatingState.State,
+    response: any
+  ) => Partial<typeof MessageRatingState.State>;
+}) => {
+  return async function (
+    state: typeof MessageRatingState.State
+  ): Promise<Partial<typeof MessageRatingState.State>> {
+    console.log(`-> Agent ${name} is invoked...`);
+    const myModel = model.withStructuredOutput(responseSchema);
+    const prompt = systemPrompt(state);
+
+    const response = await myModel.invoke([
+      new HumanMessage(prompt),
+    ]);
+
+    const updatedState = returnFunction(state, response);
+
+    return updatedState;
+  };
+};
+
+const messageRatingAgent = makeMessageRatingAgentNodes<MessageRatingSchema>({
+  name: "Message_Rating_Agent",
+  responseSchema: messageRatingSchema,
+  model: feedbackLLM,
+  systemPrompt: messageRatingPromptXML,
+  returnFunction: function (state: typeof MessageRatingState.State, response: MessageRatingSchema) {
+    return {
+      ...state,
+      rating: response,
+    };
+  }
+});
+
+const alternativeSuggestionsAgent = makeMessageRatingAgentNodes<AlternativeSuggestionsSchema>({
+  name: "Alternative_Suggestions_Agent",
+  responseSchema: alternativeSuggestionsSchema,
+  model: feedbackLLM,
+  systemPrompt: alternativeSuggestionsPromptXML,
+  returnFunction: function (state: typeof MessageRatingState.State, response: AlternativeSuggestionsSchema) {
+    return {
+      ...state,
+      suggestions: response,
+    };
+  }
+});
+
+
+// Conditional edge to check if alternatives are needed
+const checkIfAlternativesNeeded = (state: typeof MessageRatingState.State) => {
+  const threshold = 5;
+  if (state.shouldProvideAlternatives || (state.rating && state.rating.Message_Rating.Rating < threshold)) {
+    return "provide_alternatives";
+  }
+  return "end";
+};
+
+// Export the new workflow
+export const messageRatingWorkflow = new StateGraph(MessageRatingState)
+  .addNode("rate_message", messageRatingAgent)
+  .addNode("provide_alternatives", alternativeSuggestionsAgent)
+  .addEdge(START, "rate_message")
+  .addConditionalEdges(
+    "rate_message",
+    checkIfAlternativesNeeded,
+    {
+      "provide_alternatives": "provide_alternatives",
+      "end": END
+    }
+  )
+  .addEdge("provide_alternatives", END)
+  .compile();
+
+
+//     // ================================================================
+//     // Multiple Session Feedback Flow
+//     // ================================================================
+
+/* -------------------------------------------------------------------------- */
+/*                               STATE DEFINITION                             */
+/* -------------------------------------------------------------------------- */
+
+export const FeedbackOnlyState = Annotation.Root({
+  threads: Annotation<ThreadWithMessages[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+  groupFeedback: Annotation<typeof groupFeedbackSchema>(),
+});
+
+/* -------------------------------------------------------------------------- */
+/*                           FEEDBACK NODE                                    */
+/* -------------------------------------------------------------------------- */
+
+export const groupFeedbackSchema = z.object({
+  summary: z.string().describe("Overall summary of the group's performance across all sessions"),
+  strengths: z.array(z.string()).describe("Common strengths observed across sessions"),
+  weaknesses: z.array(z.string()).describe("Common weaknesses or areas needing improvement"),
+  recommendations: z.array(z.string()).describe("Actionable recommendations for the trainee"),
+  scores: z.object({
+    communication: z.number().min(0).max(10).describe("Communication effectiveness score"),
+    empathy: z.number().min(0).max(10).describe("Empathy and emotional intelligence score"),
+    accuracy: z.number().min(0).max(10).describe("Accuracy and attention to detail score"),
+    overall: z.number().min(0).max(10).describe("Overall performance score"),
+  }).describe("Numerical scores for different competencies"),
+  session_breakdown: z.array(
+    z.object({
+      thread_title: z.string(),
+      key_observations: z.array(z.string()),
+      score: z.number().min(0).max(10),
+    })
+  ).describe("Individual session observations"),
+});
+
+export const groupFeedbackNode = async (
+  state: StateType<typeof FeedbackOnlyState.spec>
+) => {
+  const { threads } = state;
+
+  const threadBlocks = threads
+    .filter((t) => (t?.messages?.length ?? 0) > 0)
+    .map((thread, index) => {
+      const scenarioText =
+        typeof thread.thread.scenario === "string"
+          ? thread.thread.scenario
+          : JSON.stringify(thread.thread.scenario, null, 2);
+
+      const personaText =
+        typeof thread.thread.persona === "string"
+          ? thread.thread.persona
+          : JSON.stringify(thread.thread.persona, null, 2);
+
+      const conversationText = thread.messages?.map((m) => `${m.role.toUpperCase()}: ${typeof m.parts === "string" ? m.parts : JSON.stringify(m.parts)}`)
+        .join("\n");
+
+      return `
+================ THREAD ${index + 1} ================
+🧭 Title: ${thread.thread.title}
+
+📜 Scenario:
+${scenarioText}
+
+👤 Persona:
+${personaText}
+
+💬 Conversation History:
+${conversationText}
+`;
+    })
+    .join("\n\n");
+
+  const userPrompt = `
+You are an expert training evaluator. You are given multiple training sessions.
+Each thread represents one training session between a trainee and an AI customer simulator.
+
+For each thread:
+- Consider its scenario, persona, and full conversation history.
+- Identify patterns across all threads (strengths, weaknesses, communication style).
+- Aggregate this into group-level feedback.
+
+Here are the threads:
+
+${threadBlocks}
+
+Return ONLY a JSON object with this structure:
+{
+  "summary": string,
+  "strengths": string[],
+  "weaknesses": string[],
+  "recommendations": string[],
+  "scores": {
+    "communication": number,
+    "empathy": number,
+    "accuracy": number,
+    "overall": number
+  }
+}
+`;
+
+  const response = await feedbackLLM.withStructuredOutput(groupFeedbackSchema).invoke([
+    { role: "user", content: userPrompt },
+  ]);
+
+  let parsed;
+  try {
+    parsed = response;
+  } catch (err) {
+    console.error("❌ Failed to parse LLM feedback JSON:", err);
+    parsed = { error: "Failed to parse feedback" };
+  }
+
+  return { groupFeedback: parsed };
+};
+
+/* -------------------------------------------------------------------------- */
+/*                               WORKFLOW GRAPH                               */
+/* -------------------------------------------------------------------------- */
+
+export const groupFeedbackWorkflow = new StateGraph(FeedbackOnlyState)
+  .addNode("group_feedback", groupFeedbackNode)
+  .addEdge(START, "group_feedback")
+  .addEdge("group_feedback", END)
   .compile();

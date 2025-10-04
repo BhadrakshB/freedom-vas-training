@@ -49,6 +49,16 @@ export async function getThreadsByUserAndStatus(userId: string, status: 'active'
     .orderBy(desc(thread.createdAt));
 }
 
+// READ (fetch threads by group ID)
+export async function getThreadsByGroupId(groupId: string) {
+  return await db.select().from(thread)
+    .where(and(
+      eq(thread.groupId, groupId),
+      isNull(thread.deletedAt)
+    ))
+    .orderBy(desc(thread.createdAt));
+}
+
 // READ (fetch public threads)
 export async function getPublicThreads() {
   return await db.select().from(thread)

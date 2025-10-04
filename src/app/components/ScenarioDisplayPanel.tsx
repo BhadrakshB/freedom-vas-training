@@ -50,12 +50,30 @@ export function ScenarioDisplayPanel({
           </div>
         )}
         
-        {scenario.expected_va_challenges && (
+        {scenario.constraints_and_policies && scenario.constraints_and_policies.length > 0 && (
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-1">
+              Policies & Constraints
+            </h4>
+            <p className="text-sm">{scenario.constraints_and_policies.join(', ')}</p>
+          </div>
+        )}
+        
+        {scenario.expected_va_challenges && scenario.expected_va_challenges.length > 0 && (
           <div>
             <h4 className="text-xs font-medium text-muted-foreground mb-1">
               Expected Challenges
             </h4>
-            <p className="text-sm">{scenario.expected_va_challenges}</p>
+            <p className="text-sm">{scenario.expected_va_challenges.join(', ')}</p>
+          </div>
+        )}
+        
+        {scenario.success_criteria && scenario.success_criteria.length > 0 && (
+          <div>
+            <h4 className="text-xs font-medium text-muted-foreground mb-1">
+              Success Criteria
+            </h4>
+            <p className="text-sm">{scenario.success_criteria.join(', ')}</p>
           </div>
         )}
       </div>

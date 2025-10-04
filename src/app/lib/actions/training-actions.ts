@@ -2,7 +2,8 @@
 
 import { BaseMessage, MessageContent } from "@langchain/core/messages";
 import { TrainingError, ERROR_MESSAGES } from "../error-handling";
-import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow, TrainingStateType, FeedbackSchema } from "@/lib/agents/v2/graph_v2"
+import { ScenarioGeneratorSchema, PersonaGeneratorSchema, scenarioPersonaRefineWorkflow, workflow, TrainingStateType, FeedbackSchema, messageRatingWorkflow, MessageRatingSchema, AlternativeSuggestionsSchema } from "@/lib/agents/v2/graph_v2"
+import { createMessageWithRatingAndSuggestions, updateMessageRatingAndSuggestions } from "../db/actions/message-actions";
 
 interface StartTrainingResponse {
   scenario?: ScenarioGeneratorSchema,
@@ -41,7 +42,7 @@ export async function startTrainingSession(request?: StartTrainingRequest): Prom
 
     return {
       // state: data,
-      scenario: data?.scenario ,
+      scenario: data?.scenario,
       guestPersona: data?.persona,
       messages: data?.conversationHistory,
       finalOutput: lastMessage,
@@ -70,6 +71,8 @@ interface UpdateTrainingResponse {
   messages: BaseMessage[],
   guestResponse: MessageContent,
   status: TrainingStateType,
+  lastMessageRating?: MessageRatingSchema | null,
+  lastMessageRatingReason?: AlternativeSuggestionsSchema | null,
   feedback?: FeedbackSchema,
   error?: string;
   errorType?: string;
@@ -109,18 +112,19 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
     console.log(`Updating training session with ${request.messages.length} messages`);
 
     // Create guest agent and process conversation
-    const data = await workflow.invoke({
-      conversationHistory: request.messages,
-      persona: request.guestPersona,
-      scenario: request.scenario,
-    });
-
-    console.log("=== WORKFLOW STATE RETURNED ===");
-    console.log("Full State:", JSON.stringify(data, null, 2));
-    console.log("Messages:", data?.conversationHistory?.length || 0);
-    console.log("Scenario:", data?.scenario ? "Present" : "Not present");
-    console.log("Persona:", data?.persona ? "Present" : "Not present");
-    console.log("===============================");
+    const [data, currMessageRating] = await Promise.all([
+      workflow.invoke({
+        conversationHistory: request.messages,
+        persona: request.guestPersona,
+        scenario: request.scenario,
+      }),
+      messageRatingWorkflow.invoke({
+        conversationHistory: request.messages,
+        latestUserMessage: request.messages[request.messages.length - 1].content,
+        scenario: request.scenario,
+        persona: request.guestPersona,
+      })
+    ]);
 
     const messages = data?.conversationHistory || [];
     const lastMessage =
@@ -134,7 +138,9 @@ export async function updateTrainingSession(request: UpdateTrainingRequest): Pro
       guestResponse: lastMessage,
       status: data?.status || 'in_progress',
       feedback: data?.feedback,
-      
+      lastMessageRating: currMessageRating?.rating,
+      lastMessageRatingReason: currMessageRating?.suggestions,
+
     }
 
   } catch (error) {
@@ -461,6 +467,246 @@ export async function refinePersona(request: RefinePersonaRequest): Promise<Refi
 
     return {
       originalPersona: request.persona,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}
+
+interface SaveMessageWithFeedbackRequest {
+  chatId: string;
+  role: string;
+  parts: any;
+  attachments: any;
+  isTraining?: boolean;
+  messageRating?: MessageRatingSchema;
+  messageSuggestions?: AlternativeSuggestionsSchema;
+}
+
+interface SaveMessageWithFeedbackResponse {
+  messageId?: string;
+  success: boolean;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function saveMessageWithFeedback(request: SaveMessageWithFeedbackRequest): Promise<SaveMessageWithFeedbackResponse> {
+  try {
+    // Validate required fields
+    if (!request.chatId || typeof request.chatId !== "string") {
+      throw new TrainingError(
+        "Chat ID is required to save message",
+        'validation',
+        'medium',
+        'MISSING_CHAT_ID'
+      );
+    }
+
+    if (!request.role || typeof request.role !== "string") {
+      throw new TrainingError(
+        "Role is required to save message",
+        'validation',
+        'medium',
+        'MISSING_ROLE'
+      );
+    }
+
+    if (!request.parts) {
+      throw new TrainingError(
+        "Message parts are required to save message",
+        'validation',
+        'medium',
+        'MISSING_PARTS'
+      );
+    }
+
+    console.log(`Saving message with feedback for chat: ${request.chatId}`);
+
+    // Create message with rating and suggestions
+    const savedMessage = await createMessageWithRatingAndSuggestions({
+      chatId: request.chatId,
+      role: request.role,
+      parts: request.parts,
+      attachments: request.attachments || [],
+      isTraining: request.isTraining || false,
+      messageRating: request.messageRating || null,
+      messageSuggestions: request.messageSuggestions || null,
+    });
+
+    console.log(`Message saved successfully with ID: ${savedMessage.id}`);
+
+    return {
+      messageId: savedMessage.id,
+      success: true,
+    };
+
+  } catch (error) {
+    console.error("Save message with feedback error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        success: false,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}
+
+interface UpdateMessageFeedbackRequest {
+  messageId: string;
+  messageRating?: MessageRatingSchema;
+  messageSuggestions?: AlternativeSuggestionsSchema;
+}
+
+interface UpdateMessageFeedbackResponse {
+  success: boolean;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function updateMessageFeedback(request: UpdateMessageFeedbackRequest): Promise<UpdateMessageFeedbackResponse> {
+  try {
+    // Validate required fields
+    if (!request.messageId || typeof request.messageId !== "string") {
+      throw new TrainingError(
+        "Message ID is required to update message feedback",
+        'validation',
+        'medium',
+        'MISSING_MESSAGE_ID'
+      );
+    }
+
+    console.log(`Updating message feedback for message: ${request.messageId}`);
+
+    // Update message with rating and suggestions
+    await updateMessageRatingAndSuggestions(
+      request.messageId,
+      request.messageRating || null,
+      request.messageSuggestions || null
+    );
+
+    console.log(`Message feedback updated successfully for ID: ${request.messageId}`);
+
+    return {
+      success: true,
+    };
+
+  } catch (error) {
+    console.error("Update message feedback error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        success: false,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
+      errorType: 'unknown',
+    };
+  }
+}
+
+interface EndBulkTrainingRequest {
+  groupId: string;
+}
+
+interface EndBulkTrainingResponse {
+  groupFeedback?: any;
+  success: boolean;
+  error?: string;
+  errorType?: string;
+  errorCode?: string;
+}
+
+export async function endBulkTrainingSession(request: EndBulkTrainingRequest): Promise<EndBulkTrainingResponse> {
+  try {
+    // Validate required fields
+    if (!request.groupId || typeof request.groupId !== "string") {
+      throw new TrainingError(
+        "Group ID is required to end bulk training session",
+        'validation',
+        'medium',
+        'MISSING_GROUP_ID'
+      );
+    }
+
+    console.log(`Ending bulk training session for group: ${request.groupId}`);
+
+    // Import necessary functions
+    const { getThreadsByGroupId } = await import('../db/actions/thread-actions');
+    const { getMessagesByChatId } = await import('../db/actions/message-actions');
+    const { groupFeedbackWorkflow } = await import('../agents/v2/graph_v2');
+
+    // Fetch all threads in the group
+    const threads = await getThreadsByGroupId(request.groupId);
+
+    if (!threads || threads.length === 0) {
+      throw new TrainingError(
+        "No threads found in this group",
+        'validation',
+        'medium',
+        'NO_THREADS_IN_GROUP'
+      );
+    }
+
+    console.log(`Found ${threads.length} threads in group ${request.groupId}`);
+
+    // Fetch messages for each thread
+    const threadsWithMessages = await Promise.all(
+      threads.map(async (thread) => {
+        const messages = await getMessagesByChatId(thread.id);
+        return {
+          thread,
+          messages: messages || [],
+        };
+      })
+    );
+
+    console.log(`Fetched messages for all threads. Invoking group feedback workflow...`);
+
+    // Invoke the group feedback workflow
+    const result = await groupFeedbackWorkflow.invoke({
+      threads: threadsWithMessages,
+    });
+
+    console.log("=== GROUP FEEDBACK WORKFLOW RESULT ===");
+    console.log("Group Feedback:", result?.groupFeedback ? "Present" : "Not present");
+    console.log("===============================");
+
+    return {
+      groupFeedback: result?.groupFeedback,
+      success: true,
+    };
+
+  } catch (error) {
+    console.error("End bulk training session error:", error);
+
+    if (error instanceof TrainingError) {
+      return {
+        success: false,
+        error: error.message,
+        errorType: error.type,
+        errorCode: error.code,
+      };
+    }
+
+    return {
+      success: false,
       error: error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR,
       errorType: 'unknown',
     };

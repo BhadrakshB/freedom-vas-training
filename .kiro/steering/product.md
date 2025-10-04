@@ -2,23 +2,23 @@
 
 ## AI Training Simulator for STR Virtual Assistants
 
-This is an AI-powered training platform designed for Short-Term Rental (STR) virtual assistants. The system creates realistic training scenarios where VAs interact with simulated guests to practice handling various situations like bookings, complaints, and overbookings.
+A comprehensive AI-powered training platform for Short-Term Rental (STR) virtual assistants. The system creates realistic training scenarios where VAs interact with simulated guests to practice handling bookings, complaints, and overbookings in a safe environment.
 
-### Core Features
+## Core Features
 
-- **Scenario-Based Training**: AI generates realistic STR scenarios with specific objectives and success criteria
-- **Persona-Driven Interactions**: AI creates authentic guest personas with psychological depth and emotional progression
-- **Silent Scoring**: Real-time evaluation of VA performance without breaking immersion
+- **Realistic Scenario Generation**: AI creates authentic STR scenarios with specific objectives
+- **Dynamic Guest Personas**: AI-generated guest personalities with psychological depth
+- **Silent Performance Scoring**: Real-time evaluation without breaking immersion (5 dimensions)
 - **Comprehensive Feedback**: Post-session analysis with SOP citations and actionable recommendations
-- **Knowledge Integration**: RAG-powered system using Pinecone for SOP and training material retrieval
+- **Knowledge Integration**: RAG-powered system using company policies and training materials
 
-### Training Workflow
+## User Roles
 
-1. **Session Creation**: AI generates scenario and guest persona based on training objectives
-2. **Active Training**: VA interacts with AI guest simulator in side panel while main chat is inactive
-3. **Silent Evaluation**: Background scoring tracks performance against company policies
-4. **Feedback Phase**: Main chat becomes active with detailed performance analysis and coaching
+- **Virtual Assistants (Trainees)**: Complete training sessions, receive feedback, track progress
+- **Administrators**: Manage content, monitor analytics, configure scenarios
 
-### Target Users
+## Key Workflows
 
-Virtual assistants working in the short-term rental industry who need to practice customer service scenarios in a safe, controlled environment before handling real guest interactions.
+1. **Training Session**: Start → AI generates scenario/persona → Interactive chat → Silent scoring → Feedback
+2. **General Chat**: Ask questions, get performance insights, review historical data
+3. **Content Management**: Upload SOPs, configure templates, monitor performance

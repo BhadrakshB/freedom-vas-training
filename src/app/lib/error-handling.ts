@@ -10,7 +10,7 @@ export const ERROR_MESSAGES = {
   TIMEOUT_ERROR: "Request timed out. Please try again.",
 } as const;
 
-export type ErrorType = 
+export type ErrorType =
   | 'validation'
   | 'network'
   | 'timeout'
@@ -106,7 +106,7 @@ export function classifyError(error: unknown): ErrorType {
   if (isTrainingError(error)) {
     return error.type;
   }
-  
+
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     if (message.includes('network') || message.includes('fetch')) {
@@ -119,6 +119,6 @@ export function classifyError(error: unknown): ErrorType {
       return 'validation';
     }
   }
-  
+
   return 'unknown';
 }

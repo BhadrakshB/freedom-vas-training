@@ -9,6 +9,6 @@ export default defineConfig({
   schema: './src/app/lib/db/schema.ts',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.NEON_DATABASE_URL!,
+    url: process.env.NEXT_PUBLIC_NEON_DATABASE_URL!,
   },
 });
