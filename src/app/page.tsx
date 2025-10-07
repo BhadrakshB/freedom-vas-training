@@ -9,8 +9,6 @@ import {
 } from "./contexts/CoreAppDataContext";
 
 function ChatPageWrapper() {
-  const trainingCtx = useContext(CoreAppDataContext);
-
   return <ChatPage />;
 }
 export default function RootLayout() {
