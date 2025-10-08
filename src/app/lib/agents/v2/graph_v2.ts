@@ -560,23 +560,9 @@ export const messageRatingWorkflow = new StateGraph(MessageRatingState)
 //     // ================================================================
 //     // Multiple Session Feedback Flow
 //     // ================================================================
-
 /* -------------------------------------------------------------------------- */
-/*                               STATE DEFINITION                             */
+/*                             Zod Schema Definition                           */
 /* -------------------------------------------------------------------------- */
-
-export const FeedbackOnlyState = Annotation.Root({
-  threads: Annotation<ThreadWithMessages[]>({
-    reducer: (_, next) => next,
-    default: () => [],
-  }),
-  groupFeedback: Annotation<typeof groupFeedbackSchema>(),
-});
-
-/* -------------------------------------------------------------------------- */
-/*                           FEEDBACK NODE                                    */
-/* -------------------------------------------------------------------------- */
-
 export const groupFeedbackSchema = z.object({
   summary: z.string().describe("Overall summary of the group's performance across all sessions"),
   strengths: z.array(z.string()).describe("Common strengths observed across sessions"),
@@ -587,98 +573,133 @@ export const groupFeedbackSchema = z.object({
     empathy: z.number().min(0).max(10).describe("Empathy and emotional intelligence score"),
     accuracy: z.number().min(0).max(10).describe("Accuracy and attention to detail score"),
     overall: z.number().min(0).max(10).describe("Overall performance score"),
-  }).describe("Numerical scores for different competencies"),
+  }),
+  guest_prioritization: z.object({
+    analysis: z.string().describe("Analysis of guest prioritization and multi-thread handling"),
+    behavior_pattern: z.string().describe("Pattern of prioritization observed"),
+    suggestions: z.array(z.string()).describe("Suggestions to improve prioritization"),
+    score: z.number().min(0).max(10).describe("Numerical score for prioritization"),
+  }),
+  responsiveness: z.object({
+    analysis: z.string().describe("Analysis of trainee response times across threads"),
+    avg_response_time_sec: z.number().describe("Average response time in seconds"),
+    variability: z.string().describe("How consistent were the response times"),
+    suggestions: z.array(z.string()).describe("Suggestions to improve responsiveness"),
+    score: z.number().min(0).max(10).describe("Numerical score for responsiveness"),
+  }),
   session_breakdown: z.array(
     z.object({
       thread_title: z.string(),
       key_observations: z.array(z.string()),
       score: z.number().min(0).max(10),
+      response_time_sec: z.number().optional(),
+      prioritization_note: z.string().optional(),
     })
-  ).describe("Individual session observations"),
+  ),
 });
 
+/* -------------------------------------------------------------------------- */
+/*                            State Definition                                 */
+/* -------------------------------------------------------------------------- */
+export const FeedbackOnlyState = Annotation.Root({
+  threads: Annotation<ThreadWithMessages[]>({
+    reducer: (_, next) => next,
+    default: () => [],
+  }),
+  groupFeedback: Annotation<any>(),
+});
+
+/* -------------------------------------------------------------------------- */
+/*                            Feedback Node                                    */
+/* -------------------------------------------------------------------------- */
 export const groupFeedbackNode = async (
   state: StateType<typeof FeedbackOnlyState.spec>
 ) => {
   const { threads } = state;
 
-  const threadBlocks = threads
+  // Convert threads into YAML-like string
+  const threadsYaml = threads
     .filter((t) => (t?.messages?.length ?? 0) > 0)
-    .map((thread, index) => {
+    .map((thread) => {
       const scenarioText =
         typeof thread.thread.scenario === "string"
           ? thread.thread.scenario
-          : JSON.stringify(thread.thread.scenario, null, 2);
+          : JSON.stringify(thread.thread.scenario);
 
       const personaText =
         typeof thread.thread.persona === "string"
           ? thread.thread.persona
-          : JSON.stringify(thread.thread.persona, null, 2);
+          : JSON.stringify(thread.thread.persona);
 
-      const conversationText = thread.messages?.map((m) => `${m.role.toUpperCase()}: ${typeof m.parts === "string" ? m.parts : JSON.stringify(m.parts)}`)
+      const messagesYaml = thread.messages
+        ?.map((m, i, arr) => {
+          let responseTimeSec = 0;
+          if (i > 0 && arr[i - 1].createdAt) {
+            const prev = new Date(arr[i - 1].createdAt).getTime();
+            const curr = new Date(m.createdAt).getTime();
+            responseTimeSec = (curr - prev) / 1000;
+          }
+          return `      - role: ${m.role}
+        content: |-
+          ${typeof m.parts === "string" ? m.parts : JSON.stringify(m.parts)}
+        createdAt: "${m.createdAt}"
+        responseTimeSec: ${responseTimeSec}`;
+        })
         .join("\n");
 
-      return `
-================ THREAD ${index + 1} ================
-🧭 Title: ${thread.thread.title}
-
-📜 Scenario:
-${scenarioText}
-
-👤 Persona:
-${personaText}
-
-💬 Conversation History:
-${conversationText}
-`;
+      return `- thread_title: "${thread.thread.title}"
+  scenario: |-
+    ${scenarioText}
+  persona: |-
+    ${personaText}
+  messages:
+${messagesYaml}`;
     })
-    .join("\n\n");
+    .join("\n");
 
+  // User prompt with YAML data
   const userPrompt = `
-You are an expert training evaluator. You are given multiple training sessions.
-Each thread represents one training session between a trainee and an AI customer simulator.
+You are an expert hospitality training evaluator.
 
-For each thread:
-- Consider its scenario, persona, and full conversation history.
-- Identify patterns across all threads (strengths, weaknesses, communication style).
-- Aggregate this into group-level feedback.
+You are given multiple training sessions in YAML format.
+Each session contains:
+- scenario: the training scenario
+- persona: guest information
+- messages: full conversation with roles and timestamps, including response times
 
-Here are the threads:
+Analyze the trainee's performance from multiple perspectives:
+1. Overall performance: communication, empathy, accuracy, overall.
+2. Session-specific observations and scores.
+3. Guest prioritization: did they handle urgent guests first? Were they switching threads logically or randomly?
+4. Responsiveness: speed and consistency of replies. Highlight slow responses or delays.
+5. Provide actionable recommendations for improvement.
 
-${threadBlocks}
+Use the YAML data below as the source:
 
-Return ONLY a JSON object with this structure:
-{
-  "summary": string,
-  "strengths": string[],
-  "weaknesses": string[],
-  "recommendations": string[],
-  "scores": {
-    "communication": number,
-    "empathy": number,
-    "accuracy": number,
-    "overall": number
-  }
-}
+threads:
+${threadsYaml}
+
+Return ONLY a JSON object matching this Zod schema:
+- summary
+- strengths
+- weaknesses
+- recommendations
+- scores
+- guest_prioritization
+- responsiveness
+- session_breakdown
 `;
 
-  const response = await feedbackLLM.withStructuredOutput(groupFeedbackSchema).invoke([
-    { role: "user", content: userPrompt },
-  ]);
+  // Invoke LLM with structured output
+  const response = await feedbackLLM
+    .withStructuredOutput(groupFeedbackSchema)
+    .invoke([{ role: "user", content: userPrompt }]);
 
-  let parsed;
-  try {
-    parsed = response;
-  } catch (err) {
-    console.error("❌ Failed to parse LLM feedback JSON:", err);
-    parsed = { error: "Failed to parse feedback" };
-  }
-
-  return { groupFeedback: parsed };
+  return { groupFeedback: response };
 };
 
 /* -------------------------------------------------------------------------- */
-/*                               WORKFLOW GRAPH                               */
+/*                        State Graph Workflow                                 */
 /* -------------------------------------------------------------------------- */
 
 export const groupFeedbackWorkflow = new StateGraph(FeedbackOnlyState)

@@ -27,6 +27,26 @@ interface GroupFeedback {
     accuracy: number;
     overall: number;
   };
+  guest_prioritization: {
+    analysis: string;
+    behavior_pattern: string;
+    suggestions: string[];
+    score: number;
+  };
+  responsiveness: {
+    analysis: string;
+    avg_response_time_sec: number;
+    variability: string;
+    suggestions: string[];
+    score: number;
+  };
+  session_breakdown: Array<{
+    thread_title: string;
+    key_observations: string[];
+    score: number;
+    response_time_sec?: number;
+    prioritization_note?: string;
+  }>;
 }
 
 export function TrainingPanels() {
@@ -186,9 +206,10 @@ export function TrainingPanels() {
               )}
 
               {groupFeedback && (
-                <div className="p-4 bg-muted/30 rounded-lg space-y-3">
+                <div className="p-4 bg-muted/30 rounded-lg space-y-4">
                   <h3 className="font-semibold text-sm">Group Feedback</h3>
-                  <div className="space-y-2">
+
+                  <div className="space-y-3">
                     <div>
                       <h4 className="text-xs font-medium text-muted-foreground mb-1">
                         Summary
@@ -197,6 +218,115 @@ export function TrainingPanels() {
                         {groupFeedback.summary}
                       </p>
                     </div>
+
+                    {groupFeedback.scores && (
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                          Performance Scores
+                        </h4>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div className="flex justify-between">
+                            <span>Communication:</span>
+                            <span className="font-medium">
+                              {groupFeedback.scores.communication}/10
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Empathy:</span>
+                            <span className="font-medium">
+                              {groupFeedback.scores.empathy}/10
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Accuracy:</span>
+                            <span className="font-medium">
+                              {groupFeedback.scores.accuracy}/10
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Overall:</span>
+                            <span className="font-medium">
+                              {groupFeedback.scores.overall}/10
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {groupFeedback.guest_prioritization && (
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                          Guest Prioritization (Score:{" "}
+                          {groupFeedback.guest_prioritization.score}/10)
+                        </h4>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {groupFeedback.guest_prioritization.analysis}
+                        </p>
+                        <p className="text-sm text-muted-foreground italic mb-2">
+                          Pattern:{" "}
+                          {groupFeedback.guest_prioritization.behavior_pattern}
+                        </p>
+                        {groupFeedback.guest_prioritization.suggestions.length >
+                          0 && (
+                          <ul className="text-sm text-muted-foreground space-y-1">
+                            {groupFeedback.guest_prioritization.suggestions.map(
+                              (sug, idx) => (
+                                <li
+                                  key={idx}
+                                  className="flex items-start gap-2"
+                                >
+                                  <span className="text-purple-600 dark:text-purple-400">
+                                    →
+                                  </span>
+                                  <span>{sug}</span>
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+
+                    {groupFeedback.responsiveness && (
+                      <div>
+                        <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                          Responsiveness (Score:{" "}
+                          {groupFeedback.responsiveness.score}/10)
+                        </h4>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          {groupFeedback.responsiveness.analysis}
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Avg Response Time:{" "}
+                          {groupFeedback.responsiveness.avg_response_time_sec.toFixed(
+                            1
+                          )}
+                          s
+                        </p>
+                        <p className="text-sm text-muted-foreground italic mb-2">
+                          Variability:{" "}
+                          {groupFeedback.responsiveness.variability}
+                        </p>
+                        {groupFeedback.responsiveness.suggestions.length >
+                          0 && (
+                          <ul className="text-sm text-muted-foreground space-y-1">
+                            {groupFeedback.responsiveness.suggestions.map(
+                              (sug, idx) => (
+                                <li
+                                  key={idx}
+                                  className="flex items-start gap-2"
+                                >
+                                  <span className="text-cyan-600 dark:text-cyan-400">
+                                    →
+                                  </span>
+                                  <span>{sug}</span>
+                                </li>
+                              )
+                            )}
+                          </ul>
+                        )}
+                      </div>
+                    )}
 
                     {groupFeedback.strengths &&
                       groupFeedback.strengths.length > 0 && (
@@ -267,6 +397,60 @@ export function TrainingPanels() {
                               )
                             )}
                           </ul>
+                        </div>
+                      )}
+
+                    {groupFeedback.session_breakdown &&
+                      groupFeedback.session_breakdown.length > 0 && (
+                        <div>
+                          <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                            Session Breakdown
+                          </h4>
+                          <div className="space-y-3">
+                            {groupFeedback.session_breakdown.map(
+                              (session, idx) => (
+                                <div
+                                  key={idx}
+                                  className="border-l-2 border-muted pl-3 space-y-1"
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <p className="text-sm font-medium">
+                                      {session.thread_title}
+                                    </p>
+                                    <span className="text-xs font-medium">
+                                      {session.score}/10
+                                    </span>
+                                  </div>
+                                  {session.response_time_sec !== undefined && (
+                                    <p className="text-xs text-muted-foreground">
+                                      Response Time:{" "}
+                                      {session.response_time_sec.toFixed(1)}s
+                                    </p>
+                                  )}
+                                  {session.prioritization_note && (
+                                    <p className="text-xs text-muted-foreground italic">
+                                      {session.prioritization_note}
+                                    </p>
+                                  )}
+                                  {session.key_observations.length > 0 && (
+                                    <ul className="text-xs text-muted-foreground space-y-0.5 mt-1">
+                                      {session.key_observations.map(
+                                        (obs, obsIdx) => (
+                                          <li
+                                            key={obsIdx}
+                                            className="flex items-start gap-1"
+                                          >
+                                            <span>-</span>
+                                            <span>{obs}</span>
+                                          </li>
+                                        )
+                                      )}
+                                    </ul>
+                                  )}
+                                </div>
+                              )
+                            )}
+                          </div>
                         </div>
                       )}
                   </div>

@@ -1315,6 +1315,48 @@ export function CoreAppDataProvider({
           new HumanMessage(userMessage),
         ];
 
+        // Locally update the thread with the new user message immediately for better UX
+        setState((prevState) => ({
+          ...prevState,
+          userThreads: prevState.userThreads.map((threadWithMessages) =>
+            threadWithMessages.thread.id === threadId
+              ? {
+                  ...threadWithMessages,
+                  messages: threadWithMessages.messages
+                    ? [
+                        ...threadWithMessages.messages,
+                        {
+                          id: `temp-${Date.now()}`, // Temporary ID
+                          chatId: threadId,
+                          role: "trainee",
+                          parts: { content: userMessage },
+                          attachments: [],
+                          isTraining: true,
+                          messageRating: null,
+                          messageSuggestions: null,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                        },
+                      ]
+                    : [
+                        {
+                          id: `temp-${Date.now()}`,
+                          chatId: threadId,
+                          role: "trainee",
+                          parts: { content: userMessage },
+                          attachments: [],
+                          isTraining: true,
+                          messageRating: null,
+                          messageSuggestions: null,
+                          createdAt: new Date(),
+                          updatedAt: new Date(),
+                        },
+                      ],
+                }
+              : threadWithMessages
+          ),
+        }));
+
         // Call the update training action with updated conversation history FIRST
         const result = await updateTrainingSession({
           scenario: scenario,
