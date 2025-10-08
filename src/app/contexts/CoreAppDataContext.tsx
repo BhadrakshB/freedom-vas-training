@@ -1621,11 +1621,19 @@ export function CoreAppDataProvider({
       setError(null, null);
 
       try {
+        // Convert ExtendedHumanMessageImpl instances to HumanMessage
+        const processedHistory = conversationHistory.map((message) => {
+          if (message instanceof ExtendedHumanMessageImpl) {
+            return message.toHumanMessage();
+          }
+          return message;
+        });
+
         // Call the end training action FIRST
         const result = await endTrainingSession({
           scenario,
           guestPersona: persona,
-          messages: conversationHistory,
+          messages: processedHistory,
         });
 
         // Check if AI operation was successful before proceeding with database operations
