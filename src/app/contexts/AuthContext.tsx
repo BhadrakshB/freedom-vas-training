@@ -703,13 +703,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         for (const provider of userToStore.providerData) {
           console.log("storeUserProfile: Processing provider", {
             providerId: provider.providerId,
-            providerUid: provider.uid,
+            providerUid: userToStore.uid,
           });
 
           // Step 1: Check if UserAuth entry exists for this provider
           const existingAuth = await getUserAuthByProvider(
             provider.providerId,
-            user.uid
+            userToStore.uid
           );
 
           if (!existingAuth) {
@@ -728,7 +728,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await createUserAuth({
               userId: newUser.id,
               provider: provider.providerId,
-              providerUserId: provider.uid,
+              providerUserId: userToStore.uid,
               email: provider.email || userToStore.email,
               password: null, // Firebase handles auth, we don't store passwords
             });
