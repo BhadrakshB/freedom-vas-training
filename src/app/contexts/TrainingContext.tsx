@@ -1,26 +1,5 @@
 import { BaseMessage } from "@langchain/core/messages";
-import {
-  createContext,
-  useState,
-  useCallback,
-  useMemo,
-  useContext,
-} from "react";
-import {
-  FeedbackSchema,
-  PersonaGeneratorSchema,
-  ScenarioGeneratorSchema,
-  TrainingStateType,
-  MessageRatingSchema,
-  AlternativeSuggestionsSchema,
-} from "../lib/agents/v2/graph_v2";
-import { ErrorType } from "../lib/error-handling";
-import {
-  saveMessageWithFeedback,
-  updateMessageFeedback,
-} from "../lib/actions/training-actions";
-
-import { HumanMessage } from "@langchain/core/messages";
+import { createContext, useState, useMemo } from "react";
 
 export interface TrainingContextState {
   panelWidth: number;

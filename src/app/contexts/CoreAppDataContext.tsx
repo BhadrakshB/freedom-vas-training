@@ -701,13 +701,10 @@ export function CoreAppDataProvider({
 
       try {
         // First get the user's internal ID
-        const { getUserAuthByProvider } = await import(
+        const { getUserAuthByEmail } = await import(
           "../lib/db/actions/user-auth-actions"
         );
-        const userAuth = await getUserAuthByProvider(
-          "firebase",
-          authState.user.uid
-        );
+        const userAuth = await getUserAuthByEmail(authState.user.email ?? "");
 
         if (!userAuth) {
           throw new Error("User not found in database");
@@ -1152,13 +1149,10 @@ export function CoreAppDataProvider({
 
     try {
       // First get the user's internal ID from the database
-      const { getUserAuthByProvider } = await import(
+      const { getUserAuthByEmail } = await import(
         "../lib/db/actions/user-auth-actions"
       );
-      const userAuth = await getUserAuthByProvider(
-        "firebase",
-        authState.user.uid
-      );
+      const userAuth = await getUserAuthByEmail(authState.user.email ?? "");
 
       if (!userAuth) {
         throw new Error("User not found in database. Please contact support.");
@@ -1780,13 +1774,10 @@ export function CoreAppDataProvider({
         );
 
         // Get user's internal ID once
-        const { getUserAuthByProvider } = await import(
+        const { getUserAuthByEmail } = await import(
           "../lib/db/actions/user-auth-actions"
         );
-        const userAuth = await getUserAuthByProvider(
-          "firebase",
-          authState.user.uid
-        );
+        const userAuth = await getUserAuthByEmail(authState.user.email ?? "");
 
         if (!userAuth) {
           throw new Error(

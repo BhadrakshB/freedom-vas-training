@@ -709,7 +709,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Step 1: Check if UserAuth entry exists for this provider
           const existingAuth = await getUserAuthByProvider(
             provider.providerId,
-            provider.uid
+            user.uid
           );
 
           if (!existingAuth) {
