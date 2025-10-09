@@ -74,121 +74,54 @@ export function GroupFeedbackDisplay({ groupFeedback }: GroupFeedbackProps) {
 
   return (
     <div className="space-y-4">
-      {/* Overall Score Card */}
-      <Card className="border-2">
-        <CardContent className="pt-6 pb-6">
-          <div className="flex flex-col items-center text-center space-y-3">
-            <div className="p-3 bg-primary/10 rounded-full">
-              <Trophy className="h-8 w-8 text-primary" />
-            </div>
-            <div>
-              <div
-                className={`text-5xl font-bold ${getScoreColor(overallScore)}`}
-              >
-                {Math.round(overallScore * 10)}
+      {/* Overall Score and Performance Breakdown - Side by Side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Overall Score Card */}
+        <Card className="border-2">
+          <CardContent className="pt-8 pb-8 h-full flex items-center justify-center">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="p-4 bg-primary/10 rounded-full">
+                <Trophy className="h-12 w-12 text-primary" />
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                Overall Score
-              </p>
-              <div className="flex items-center justify-center gap-1 mt-2">
-                <TrendingUp className="h-3 w-3 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground">
-                  {performanceLevel}
+              <div>
+                <div
+                  className={`text-6xl font-bold ${getScoreColor(
+                    overallScore
+                  )}`}
+                >
+                  {Math.round(overallScore * 10)}
+                </div>
+                <p className="text-base text-muted-foreground mt-2 font-medium">
+                  Overall Score
                 </p>
+                <div className="flex items-center justify-center gap-2 mt-3">
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {performanceLevel}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Performance Breakdown */}
-      <Card>
-        <CardContent className="pt-6 pb-6">
-          <h3 className="font-semibold text-base mb-4">
-            Performance Breakdown
-          </h3>
-          <div className="space-y-4">
-            {/* Communication */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Communication</span>
-                <span
-                  className={`text-sm font-semibold ${getScoreColor(
-                    groupFeedback.scores.communication
-                  )}`}
-                >
-                  {Math.round(groupFeedback.scores.communication * 10)}%
-                </span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{
-                    width: `${getPercentage(
+        {/* Performance Breakdown */}
+        <Card>
+          <CardContent className="pt-6 pb-6">
+            <h3 className="font-semibold text-base mb-4">
+              Performance Breakdown
+            </h3>
+            <div className="space-y-4">
+              {/* Communication */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Communication</span>
+                  <span
+                    className={`text-sm font-semibold ${getScoreColor(
                       groupFeedback.scores.communication
-                    )}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Empathy */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Empathy</span>
-                <span
-                  className={`text-sm font-semibold ${getScoreColor(
-                    groupFeedback.scores.empathy
-                  )}`}
-                >
-                  {Math.round(groupFeedback.scores.empathy * 10)}%
-                </span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{
-                    width: `${getPercentage(groupFeedback.scores.empathy)}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Accuracy */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium">Accuracy</span>
-                <span
-                  className={`text-sm font-semibold ${getScoreColor(
-                    groupFeedback.scores.accuracy
-                  )}`}
-                >
-                  {Math.round(groupFeedback.scores.accuracy * 10)}%
-                </span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all"
-                  style={{
-                    width: `${getPercentage(groupFeedback.scores.accuracy)}%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Guest Prioritization (if available) */}
-            {groupFeedback.guest_prioritization && (
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">
-                    Guest Prioritization
-                  </span>
-                  <span
-                    className={`text-sm font-semibold ${getScoreColor(
-                      groupFeedback.guest_prioritization.score
                     )}`}
                   >
-                    {Math.round(groupFeedback.guest_prioritization.score * 10)}%
+                    {Math.round(groupFeedback.scores.communication * 10)}%
                   </span>
                 </div>
                 <div className="w-full bg-muted rounded-full h-2">
@@ -196,42 +129,117 @@ export function GroupFeedbackDisplay({ groupFeedback }: GroupFeedbackProps) {
                     className="bg-primary h-2 rounded-full transition-all"
                     style={{
                       width: `${getPercentage(
+                        groupFeedback.scores.communication
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Empathy */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Empathy</span>
+                  <span
+                    className={`text-sm font-semibold ${getScoreColor(
+                      groupFeedback.scores.empathy
+                    )}`}
+                  >
+                    {Math.round(groupFeedback.scores.empathy * 10)}%
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all"
+                    style={{
+                      width: `${getPercentage(groupFeedback.scores.empathy)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Accuracy */}
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium">Accuracy</span>
+                  <span
+                    className={`text-sm font-semibold ${getScoreColor(
+                      groupFeedback.scores.accuracy
+                    )}`}
+                  >
+                    {Math.round(groupFeedback.scores.accuracy * 10)}%
+                  </span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full transition-all"
+                    style={{
+                      width: `${getPercentage(groupFeedback.scores.accuracy)}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Guest Prioritization (if available) */}
+              {groupFeedback.guest_prioritization && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">
+                      Guest Prioritization
+                    </span>
+                    <span
+                      className={`text-sm font-semibold ${getScoreColor(
                         groupFeedback.guest_prioritization.score
-                      )}%`,
-                    }}
-                  />
+                      )}`}
+                    >
+                      {Math.round(
+                        groupFeedback.guest_prioritization.score * 10
+                      )}
+                      %
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full transition-all"
+                      style={{
+                        width: `${getPercentage(
+                          groupFeedback.guest_prioritization.score
+                        )}%`,
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Responsiveness (if available) */}
-            {groupFeedback.responsiveness && (
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium">Responsiveness</span>
-                  <span
-                    className={`text-sm font-semibold ${getScoreColor(
-                      groupFeedback.responsiveness.score
-                    )}`}
-                  >
-                    {Math.round(groupFeedback.responsiveness.score * 10)}%
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all"
-                    style={{
-                      width: `${getPercentage(
+              {/* Responsiveness (if available) */}
+              {groupFeedback.responsiveness && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium">Responsiveness</span>
+                    <span
+                      className={`text-sm font-semibold ${getScoreColor(
                         groupFeedback.responsiveness.score
-                      )}%`,
-                    }}
-                  />
+                      )}`}
+                    >
+                      {Math.round(groupFeedback.responsiveness.score * 10)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full transition-all"
+                      style={{
+                        width: `${getPercentage(
+                          groupFeedback.responsiveness.score
+                        )}%`,
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* What You Did Well */}
       {groupFeedback.strengths && groupFeedback.strengths.length > 0 && (
