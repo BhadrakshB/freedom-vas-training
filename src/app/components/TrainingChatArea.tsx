@@ -246,7 +246,7 @@ export function TrainingChatArea() {
               className="gap-2"
             >
               <Trophy className="h-4 w-4" />
-              Group Feedback
+              Session Feedback
             </Button>
           </div>
         </div>
