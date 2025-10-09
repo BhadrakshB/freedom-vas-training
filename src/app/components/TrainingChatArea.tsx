@@ -69,6 +69,11 @@ export function TrainingChatArea() {
     );
   }, [state.activeThreadId, state.userThreads]);
 
+  // Reset showGroupFeedback when thread changes
+  React.useEffect(() => {
+    setShowGroupFeedback(false);
+  }, [state.activeThreadId]);
+
   // Convert database messages to BaseMessage format
   const messages = useMemo<BaseMessage[]>(() => {
     if (!activeThread?.messages) return [];
@@ -189,9 +194,8 @@ export function TrainingChatArea() {
 
   // Handle starting a new session
   const handleStartNewSession = useCallback(() => {
-    // handleStartTraining();
     setActiveThreadId(null);
-  }, [handleStartTraining]);
+  }, [setActiveThreadId]);
 
   // Handle retry on error
   const handleRetry = useCallback(() => {
