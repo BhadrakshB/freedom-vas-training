@@ -3,12 +3,51 @@
 import React, { useMemo, useState, useCallback } from "react";
 import { MessageArea } from "./MessageArea";
 import { MessageInput } from "./MessageInput";
-import { CompletionFooter, TrainingStatusIndicator } from "./";
+import {
+  CompletionFooter,
+  TrainingStatusIndicator,
+  GroupFeedbackDisplay,
+} from "./";
+import { Button } from "./ui/button";
+import { MessageSquare, Trophy } from "lucide-react";
 import {
   ExtendedHumanMessageImpl,
   useCoreAppData,
 } from "../contexts/CoreAppDataContext";
-import { BaseMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import { BaseMessage, AIMessage } from "@langchain/core/messages";
+
+interface GroupFeedback {
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  scores: {
+    communication: number;
+    empathy: number;
+    accuracy: number;
+    overall: number;
+  };
+  guest_prioritization?: {
+    analysis: string;
+    behavior_pattern: string;
+    suggestions: string[];
+    score: number;
+  };
+  responsiveness?: {
+    analysis: string;
+    avg_response_time_sec: number;
+    variability: string;
+    suggestions: string[];
+    score: number;
+  };
+  session_breakdown?: Array<{
+    thread_title: string;
+    key_observations: string[];
+    score: number;
+    response_time_sec?: number;
+    prioritization_note?: string;
+  }>;
+}
 
 export function TrainingChatArea() {
   const {
@@ -19,6 +58,7 @@ export function TrainingChatArea() {
     setActiveThreadId,
   } = useCoreAppData();
   const [isEndingTraining, setIsEndingTraining] = useState(false);
+  const [showGroupFeedback, setShowGroupFeedback] = useState(false);
 
   // Get the active thread from userThreads using activeThreadId
   const activeThread = useMemo(() => {
@@ -79,6 +119,24 @@ export function TrainingChatArea() {
   const isSessionCompleted = trainingStatus === "completed";
   const isSessionError = state.errorType === "session";
   const isLoading = state.isLoading;
+
+  // Get group feedback if thread is part of a group
+  const threadGroup = useMemo(() => {
+    if (!activeThread?.thread.groupId) return null;
+    return state.threadGroups.find(
+      (g) => g.threadGroup.id === activeThread.thread.groupId
+    );
+  }, [activeThread, state.threadGroups]);
+
+  const groupFeedback = threadGroup?.threadGroup.groupFeedback as
+    | GroupFeedback
+    | undefined;
+
+  // Check if group feedback should be shown
+  const shouldShowGroupFeedbackToggle =
+    isSessionCompleted &&
+    groupFeedback &&
+    Object.keys(groupFeedback).length > 0;
 
   // Handle sending a message
   const handleSendMessage = useCallback(
@@ -164,9 +222,41 @@ export function TrainingChatArea() {
         </div>
       )}
 
-      {/* Message Area */}
+      {/* Toggle Button for Group Feedback */}
+      {shouldShowGroupFeedbackToggle && (
+        <div className="flex justify-center p-2 border-b bg-background/95">
+          <div className="flex gap-2">
+            <Button
+              variant={!showGroupFeedback ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowGroupFeedback(false)}
+              className="gap-2"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Messages
+            </Button>
+            <Button
+              variant={showGroupFeedback ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowGroupFeedback(true)}
+              className="gap-2"
+            >
+              <Trophy className="h-4 w-4" />
+              Group Feedback
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Message Area or Group Feedback Display */}
       <div className="flex-1 overflow-hidden">
-        <MessageArea messages={messages} className="h-full" />
+        {showGroupFeedback && shouldShowGroupFeedbackToggle ? (
+          <div className="h-full overflow-y-auto p-4">
+            <GroupFeedbackDisplay groupFeedback={groupFeedback!} />
+          </div>
+        ) : (
+          <MessageArea messages={messages} className="h-full" />
+        )}
       </div>
 
       {/* Footer - Message Input or Completion Footer */}

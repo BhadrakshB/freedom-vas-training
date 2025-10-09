@@ -7,6 +7,7 @@ import {
   CoreAppDataContext,
   CoreAppDataProvider,
 } from "./contexts/CoreAppDataContext";
+import { GroupFeedbackExample } from "./components/examples/GroupFeedbackExample";
 
 function ChatPageWrapper() {
   return <ChatPage />;
