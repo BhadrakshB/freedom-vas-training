@@ -1,7 +1,13 @@
 "use client";
 
 import React from "react";
-import { Trophy, TrendingUp, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  Trophy,
+  TrendingUp,
+  CheckCircle,
+  AlertCircle,
+  Sparkles,
+} from "lucide-react";
 import { Card, CardContent } from "./ui/card";
 
 interface GroupFeedbackProps {
