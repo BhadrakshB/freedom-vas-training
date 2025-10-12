@@ -87,6 +87,7 @@ export type DBMessage = InferSelectModel<typeof message>;
 
 export const threadGroup = pgTable("ThreadGroup", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
+  userId: uuid("userId").notNull().references(() => user.id),
   groupName: text("groupName").notNull(),
   groupFeedback: json("groupFeedback"), // Optional feedback for the group
   createdAt: timestamp("createdAt").notNull().defaultNow(),

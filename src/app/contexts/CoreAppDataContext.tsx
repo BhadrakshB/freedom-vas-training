@@ -447,7 +447,17 @@ export function CoreAppDataProvider({
     }));
 
     try {
-      const groups = await getThreadGroupsWithCounts();
+      // Get the user's internal ID
+      const { getUserAuthByEmail } = await import(
+        "../lib/db/actions/user-auth-actions"
+      );
+      const userAuth = await getUserAuthByEmail(authState.user.email ?? "");
+
+      if (!userAuth) {
+        throw new Error("User not found in database");
+      }
+
+      const groups = await getThreadGroupsWithCounts(userAuth.userId);
       // dispatch({ type: "SET_THREAD_GROUPS", payload: groups });
       setState((prevState) => ({
         ...prevState,
@@ -477,7 +487,7 @@ export function CoreAppDataProvider({
         isLoadingGroups: false,
       }));
     }
-  }, [authState.user?.uid]);
+  }, [authState.user?.uid, authState.user?.email]);
 
   // Group threads with their thread groups
   const groupThreadsWithGroups = useCallback(() => {
@@ -526,7 +536,18 @@ export function CoreAppDataProvider({
       }));
 
       try {
+        // Get the user's internal ID
+        const { getUserAuthByEmail } = await import(
+          "../lib/db/actions/user-auth-actions"
+        );
+        const userAuth = await getUserAuthByEmail(authState.user.email ?? "");
+
+        if (!userAuth) {
+          throw new Error("User not found in database");
+        }
+
         const newGroup = await createThreadGroup({
+          userId: userAuth.userId,
           groupName,
           groupFeedback,
         });

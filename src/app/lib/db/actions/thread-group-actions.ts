@@ -4,12 +4,14 @@ import { eq, desc } from "drizzle-orm";
 
 // Create a new thread group
 export async function createThreadGroup(data: {
+    userId: string;
     groupName: string;
     groupFeedback?: any;
 }): Promise<ThreadGroup> {
     const [newGroup] = await db
         .insert(threadGroup)
         .values({
+            userId: data.userId,
             groupName: data.groupName,
             groupFeedback: data.groupFeedback || null,
         })
@@ -18,11 +20,12 @@ export async function createThreadGroup(data: {
     return newGroup;
 }
 
-// Get all thread groups
-export async function getAllThreadGroups(): Promise<ThreadGroup[]> {
+// Get all thread groups for a specific user
+export async function getAllThreadGroups(userId: string): Promise<ThreadGroup[]> {
     return await db
         .select()
         .from(threadGroup)
+        .where(eq(threadGroup.userId, userId))
         .orderBy(desc(threadGroup.createdAt));
 }
 
@@ -66,14 +69,15 @@ export async function deleteThreadGroup(id: string): Promise<boolean> {
     return result.rowCount > 0;
 }
 
-// Get thread groups with thread counts
-export async function getThreadGroupsWithCounts(): Promise<
+// Get thread groups with thread counts for a specific user
+export async function getThreadGroupsWithCounts(userId: string): Promise<
     Array<ThreadGroup & { threadCount: number }>
 > {
-    // First get all groups
+    // First get all groups for the user
     const groups = await db
         .select()
         .from(threadGroup)
+        .where(eq(threadGroup.userId, userId))
         .orderBy(desc(threadGroup.createdAt));
 
     // For now, return groups with threadCount as 0
