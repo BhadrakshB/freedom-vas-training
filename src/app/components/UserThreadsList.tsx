@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Check,
   X,
+  Square,
 } from "lucide-react";
 import type { UserThread } from "../lib/actions/user-threads-actions";
 import type {
@@ -39,6 +40,7 @@ export function UserThreadsList({
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [endingGroupIds, setEndingGroupIds] = useState<Set<string>>(new Set());
 
   // Use data from CoreAppDataContext
   const {
@@ -120,6 +122,70 @@ export function UserThreadsList({
     onThreadSelect?.(thread.thread.id);
   };
 
+  // Handle ending all threads in a group
+  const handleEndGroupTraining = async (groupId: string) => {
+    setEndingGroupIds((prev) => new Set(prev).add(groupId));
+
+    try {
+      // Get all active threads in this group
+      const groupThreads = userThreads.filter(
+        (thread) =>
+          thread.thread.groupId === groupId && thread.thread.status === "active"
+      );
+
+      if (groupThreads.length === 0) {
+        console.log("No active threads to end in this group");
+        return;
+      }
+
+      console.log(
+        `Ending ${groupThreads.length} active threads in group ${groupId}...`
+      );
+
+      // Import required functions
+      const { updateThread } = await import("../lib/db/actions/thread-actions");
+
+      // End all threads in parallel
+      const endPromises = groupThreads.map(async (threadWithMessages) => {
+        try {
+          const completedAt = new Date();
+          await updateThread(threadWithMessages.thread.id, {
+            status: "completed",
+            completedAt,
+            updatedAt: completedAt,
+          } as any);
+
+          console.log(
+            `Successfully ended thread ${threadWithMessages.thread.id}`
+          );
+        } catch (error) {
+          console.error(
+            `Error ending thread ${threadWithMessages.thread.id}:`,
+            error
+          );
+          throw error;
+        }
+      });
+
+      await Promise.all(endPromises);
+
+      console.log(
+        `Successfully ended all ${groupThreads.length} threads in group ${groupId}`
+      );
+
+      // Reload threads to reflect the changes
+      await coreAppData.loadUserThreads();
+    } catch (error) {
+      console.error("Error ending group training:", error);
+    } finally {
+      setEndingGroupIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(groupId);
+        return newSet;
+      });
+    }
+  };
+
   // Render a single thread item
   const renderThread = (thread: ThreadWithMessages, isInGroup = false) => {
     const statusColor =
@@ -166,33 +232,56 @@ export function UserThreadsList({
   // Render a thread group
   const renderThreadGroup = (group: ThreadGroupWithThreads) => {
     const isExpanded = group.isExpanded ?? true;
+    const hasActiveThreads = group.threads.some(
+      (thread) => thread.thread.status === "active"
+    );
+    const isEndingGroup = endingGroupIds.has(group.threadGroup.id);
 
     return (
       <div key={group.threadGroup.id} className="space-y-1">
         {/* Group Header */}
-        <button
-          onClick={() =>
-            toggleGroupExpansion(group.threadGroup.id, !isExpanded)
-          }
-          className="w-full flex items-center gap-2 p-2 rounded hover:bg-accent/50 transition-colors group"
-        >
-          {isExpanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() =>
+              toggleGroupExpansion(group.threadGroup.id, !isExpanded)
+            }
+            className="flex-1 flex items-center gap-2 p-2 rounded hover:bg-accent/50 transition-colors group"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            )}
+            {isExpanded ? (
+              <FolderOpen className="w-3 h-3 text-muted-foreground" />
+            ) : (
+              <Folder className="w-3 h-3 text-muted-foreground" />
+            )}
+            <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground">
+              {group.threadGroup.groupName}
+            </span>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {group.threads.length}
+            </span>
+          </button>
+
+          {/* End Training Button */}
+          {hasActiveThreads && (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleEndGroupTraining(group.threadGroup.id);
+              }}
+              disabled={isEndingGroup}
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+            >
+              <Square className="h-3 w-3 mr-1" />
+              {isEndingGroup ? "Ending..." : "End"}
+            </Button>
           )}
-          {isExpanded ? (
-            <FolderOpen className="w-3 h-3 text-muted-foreground" />
-          ) : (
-            <Folder className="w-3 h-3 text-muted-foreground" />
-          )}
-          <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground">
-            {group.threadGroup.groupName}
-          </span>
-          <span className="text-xs text-muted-foreground ml-auto">
-            {group.threads.length}
-          </span>
-        </button>
+        </div>
 
         {/* Group Threads */}
         {isExpanded && (
