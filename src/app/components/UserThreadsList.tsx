@@ -127,54 +127,8 @@ export function UserThreadsList({
     setEndingGroupIds((prev) => new Set(prev).add(groupId));
 
     try {
-      // Get all active threads in this group
-      const groupThreads = userThreads.filter(
-        (thread) =>
-          thread.thread.groupId === groupId && thread.thread.status === "active"
-      );
-
-      if (groupThreads.length === 0) {
-        console.log("No active threads to end in this group");
-        return;
-      }
-
-      console.log(
-        `Ending ${groupThreads.length} active threads in group ${groupId}...`
-      );
-
-      // Import required functions
-      const { updateThread } = await import("../lib/db/actions/thread-actions");
-
-      // End all threads in parallel
-      const endPromises = groupThreads.map(async (threadWithMessages) => {
-        try {
-          const completedAt = new Date();
-          await updateThread(threadWithMessages.thread.id, {
-            status: "completed",
-            completedAt,
-            updatedAt: completedAt,
-          } as any);
-
-          console.log(
-            `Successfully ended thread ${threadWithMessages.thread.id}`
-          );
-        } catch (error) {
-          console.error(
-            `Error ending thread ${threadWithMessages.thread.id}:`,
-            error
-          );
-          throw error;
-        }
-      });
-
-      await Promise.all(endPromises);
-
-      console.log(
-        `Successfully ended all ${groupThreads.length} threads in group ${groupId}`
-      );
-
-      // Reload threads to reflect the changes
-      await coreAppData.loadUserThreads();
+      // Call the context function to handle ending all threads with AI feedback
+      await coreAppData.handleEndBulkTraining(groupId);
     } catch (error) {
       console.error("Error ending group training:", error);
     } finally {

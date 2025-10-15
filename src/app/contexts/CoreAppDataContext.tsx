@@ -2021,6 +2021,92 @@ export function CoreAppDataProvider({
       try {
         console.log(`Ending bulk training for group: ${groupId}`);
 
+        // Get all active threads in this group
+        const groupThreads = state.userThreads.filter(
+          (thread) =>
+            thread.thread.groupId === groupId &&
+            thread.thread.status === "active"
+        );
+
+        if (groupThreads.length === 0) {
+          console.log("No active threads to end in this group");
+          setState((prevState) => ({
+            ...prevState,
+            isLoading: false,
+          }));
+          return;
+        }
+
+        console.log(
+          `Ending ${groupThreads.length} active threads in group ${groupId}...`
+        );
+
+        // Import required functions
+        const { getMessagesByChatId } = await import(
+          "../lib/db/actions/message-actions"
+        );
+
+        // End all threads in parallel using handleEndTraining
+        const endPromises = groupThreads.map(async (threadWithMessages) => {
+          try {
+            // Get the scenario and persona from the thread
+            const scenario = threadWithMessages.thread.scenario as any;
+            const persona = threadWithMessages.thread.persona as any;
+
+            // Fetch messages for this thread if not already loaded
+            let messages = threadWithMessages.messages;
+            if (!messages) {
+              messages = await getMessagesByChatId(
+                threadWithMessages.thread.id
+              );
+            }
+
+            // Convert messages to BaseMessage format for handleEndTraining
+            const conversationHistory = messages.map((msg) => {
+              if (msg.role === "AI") {
+                return new AIMessage(
+                  typeof msg.parts === "string"
+                    ? msg.parts
+                    : (msg.parts as any).content || ""
+                );
+              } else {
+                return new HumanMessage(
+                  typeof msg.parts === "string"
+                    ? msg.parts
+                    : (msg.parts as any).content || ""
+                );
+              }
+            });
+
+            // Call handleEndTraining to properly end the thread with AI feedback
+            await handleEndTraining(
+              threadWithMessages.thread.id,
+              scenario,
+              persona,
+              conversationHistory
+            );
+
+            console.log(
+              `Successfully ended thread ${threadWithMessages.thread.id} with AI feedback`
+            );
+          } catch (error) {
+            console.error(
+              `Error ending thread ${threadWithMessages.thread.id}:`,
+              error
+            );
+            throw error;
+          }
+        });
+
+        await Promise.all(endPromises);
+
+        console.log(
+          `Successfully ended all ${groupThreads.length} threads in group ${groupId} with AI feedback`
+        );
+
+        // Reload threads to reflect the changes
+        await loadUserThreads();
+
         // Call the server action to generate group feedback
         const { endBulkTrainingSession } = await import(
           "../lib/actions/training-actions"
@@ -2065,7 +2151,15 @@ export function CoreAppDataProvider({
         }));
       }
     },
-    [authState.user, setError, updateThreadGroupData, loadThreadGroups]
+    [
+      authState.user,
+      setError,
+      updateThreadGroupData,
+      loadThreadGroups,
+      state.userThreads,
+      handleEndTraining,
+      loadUserThreads,
+    ]
   );
 
   const contextValue: CoreAppContextType = {
