@@ -2098,14 +2098,12 @@ export function CoreAppDataProvider({
           }
         });
 
+        // Wait for all threads to be ended
         await Promise.all(endPromises);
 
         console.log(
           `Successfully ended all ${groupThreads.length} threads in group ${groupId} with AI feedback`
         );
-
-        // Reload threads to reflect the changes
-        await loadUserThreads();
 
         // Call the server action to generate group feedback
         const { endBulkTrainingSession } = await import(
@@ -2130,8 +2128,12 @@ export function CoreAppDataProvider({
 
         console.log(`Successfully updated group ${groupId} with feedback`);
 
-        // Reload thread groups to reflect the updated feedback
-        await loadThreadGroups();
+        // Now reload everything once at the end after all operations are complete
+        await Promise.all([loadUserThreads(), loadThreadGroups()]);
+
+        console.log(
+          `Successfully reloaded threads and groups after ending bulk training for group ${groupId}`
+        );
 
         setState((prevState) => ({
           ...prevState,
