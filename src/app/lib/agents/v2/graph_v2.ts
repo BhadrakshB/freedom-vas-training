@@ -243,18 +243,18 @@ export const workflow = new StateGraph(TrainingState)
     }
   )
 
-  .addConditionalEdges(
-    "customer_simulator",
-    (state: StateType<typeof TrainingState.spec>) => {
-      console.log("LINE 236  Customer Simulator State Status:", state.status);
-      if (state.status !== "completed" || state.status == undefined) { return "end"; }
-      else { return "feedback_generator"; }
-    },
-    {
-      'end': END,
-      'feedback_generator': 'feedback_generator'
-    }
-  )
+  // .addConditionalEdges(
+  //   START,
+  //   (state: StateType<typeof TrainingState.spec>) => {
+  //     console.log("LINE 236  Customer Simulator State Status:", state.status);
+  //     if (state.status !== "completed" || state.status == undefined) { return "end"; }
+  //     else { return "feedback_generator"; }
+  //   },
+  //   {
+  //     'end': END,
+  //     'feedback_generator': 'feedback_generator'
+  //   }
+  // )
   .addEdge("persona_generator", "customer_simulator")
   .addEdge("feedback_generator", END)
   .compile();

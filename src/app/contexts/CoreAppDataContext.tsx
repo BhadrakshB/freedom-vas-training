@@ -1701,6 +1701,88 @@ export function CoreAppDataProvider({
           "with feedback:",
           result.feedback ? "Present" : "Not present"
         );
+
+        // Check if this thread is part of a group and trigger group feedback if all threads are completed
+        console.log(
+          "Thread ended, checking if group feedback should be triggered..."
+        );
+
+        // Find the thread to get its groupId
+        const currentThread = state.userThreads.find(
+          (t) => t.thread.id === threadId
+        );
+
+        if (currentThread?.thread.groupId) {
+          const groupId = currentThread.thread.groupId;
+          console.log(
+            `Checking if all threads in group ${groupId} are completed...`
+          );
+
+          // Get all threads in the same group from local state
+          const groupThreads = state.userThreads.filter((t) => {
+            console.log(
+              `${t.thread.id} is completed? ${
+                t.thread.status === "completed" ? "YES" : "NOT"
+              }`
+            );
+            return t.thread.groupId === groupId;
+          });
+
+          // Check if all threads are completed (including the one we just completed)
+          const allCompleted = groupThreads.every((t) => {
+            if (t.thread.id === threadId) return true; // The current thread is now completed
+            return t.thread.status === "completed";
+          });
+
+          console.log(
+            `Group ${groupId} has ${groupThreads.length} threads, all completed: ${allCompleted}`
+          );
+
+          if (allCompleted) {
+            console.log(
+              `All threads in group ${groupId} are completed. Triggering group feedback...`
+            );
+
+            // Trigger group feedback generation asynchronously
+            (async () => {
+              try {
+                const { endBulkTrainingSession } = await import(
+                  "../lib/actions/training-actions"
+                );
+
+                const feedbackResult = await endBulkTrainingSession({
+                  groupId,
+                });
+
+                if (feedbackResult.success) {
+                  console.log(
+                    "Group feedback generated successfully:",
+                    feedbackResult.groupFeedback
+                  );
+
+                  // Update the thread group with the feedback
+                  await updateThreadGroupData(groupId, {
+                    groupFeedback: feedbackResult.groupFeedback,
+                  });
+
+                  // Reload thread groups to reflect the updated feedback
+                  await loadThreadGroups();
+
+                  console.log(
+                    `Successfully updated group ${groupId} with feedback`
+                  );
+                } else {
+                  console.error(
+                    "Failed to generate group feedback:",
+                    feedbackResult.error
+                  );
+                }
+              } catch (err) {
+                console.error("Error in group feedback generation:", err);
+              }
+            })();
+          }
+        }
       } catch (error) {
         console.error("Error ending training session:", error);
         const errorMessage =
@@ -1712,7 +1794,14 @@ export function CoreAppDataProvider({
         setLoading(false);
       }
     },
-    [authState.user, setLoading, setError]
+    [
+      authState.user,
+      setLoading,
+      setError,
+      state.userThreads,
+      updateThreadGroupData,
+      loadThreadGroups,
+    ]
   );
 
   const handleRefineScenario = useCallback(

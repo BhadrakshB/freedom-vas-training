@@ -8,7 +8,7 @@ var scenarioGeneratorPromptXML = (state: typeof TrainingState.State) => {
   <INSTRUCTIONS>
     <RULES>
       <Rule>Output must strictly adhere to the provided schema with no additional fields or content.</Rule>
-      <Rule>Scenarios must reflect realistic STR challenges, grounded in operational context (e.g., booking errors, guest complaints, maintenance issues).</Rule>
+      <Rule>Scenarios must reflect realistic STR challenges, grounded in operational context (e.g., booking errors, guest complaints, maintenance issues, check-out/in requests).</Rule>
       <Rule>Do not invent or assume details beyond the provided state or custom scenario; use only given inputs.</Rule>
       <Rule>Assign a difficulty level (Easy, Medium, Hard) based on complexity of challenges and decision-making required.</Rule>
       <Rule>If a custom scenario is provided, expand it with necessary structure and details while preserving its core intent.</Rule>
@@ -127,13 +127,10 @@ You are the Customer Simulating Agent for an STR virtual assistant training plat
   <Rule>Initiate the conversation with a clear, concise statement of the problem based on the scenario and persona.</Rule>
   <Rule>Engage in natural, rational dialogue, responding only to trainee inputs and conversation history, without inventing unrelated issues.</Rule>
   <Rule>Reflect the persona's personality traits, communication style, and escalation behaviors consistently.</Rule>
-  <Rule>Mark Resolution_Accepted as true only if the trainee (user) has explicitly provided a solution in the conversation history that fully resolves the scenario's core problem and meets the persona's expectations realistically.</Rule>
   <Rule>Assume asynchronous tasks (e.g., manager approval, vendor coordination) are completed successfully and reflect this in the next message.</Rule>
   <Rule>Escalate only once, if necessary, and accept a clear resolution path afterward; do not prolong or contradict resolution unnecessarily.</Rule>
   <Rule>Keep responses concise, realistic, and aligned with STR operational context.</Rule>
   <Rule>The Message must always be a natural, in-character response as a genuine customer would say, based on the persona and scenario; do not include any meta commands, out-of-character text, or signals like "EXIT".</Rule>
-  <Rule>When marking Resolution_Accepted as true, ensure the Message is a natural acceptance and closure, such as thanking the VA or confirming satisfaction, without abrupt or unnatural endings.</Rule>
-  <Rule>Do not mark Resolution_Accepted as true prematurely; ensure the resolution is clearly stated by the trainee in the conversation history and would satisfy a genuine customer based on the persona.</Rule>
 </RULES>
 
 
@@ -141,7 +138,6 @@ You are the Customer Simulating Agent for an STR virtual assistant training plat
 <Customer_Simulation>
   <Message>string</Message>
   <Behavioral_Traits>list[string]</Behavioral_Traits>
-  <Resolution_Accepted>boolean</Resolution_Accepted>
 </Customer_Simulation>
 </OUTPUT_SCHEMA>
 
@@ -152,7 +148,6 @@ You are the Customer Simulating Agent for an STR virtual assistant training plat
     <Trait>Assertive</Trait>
     <Trait>Frustrated</Trait>
   </Behavioral_Traits>
-  <Resolution_Accepted>false</Resolution_Accepted>
 </Customer_Simulation>
 </EXAMPLE_OUTPUT>
 
