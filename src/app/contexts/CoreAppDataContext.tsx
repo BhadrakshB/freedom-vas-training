@@ -91,9 +91,20 @@ export class ExtendedHumanMessageImpl
   }
 }
 
+export enum ThreadLoadingState {
+  IDLE = "idle",
+  LOADING_MESSAGES = "loading_messages",
+  LOADING_SCENARIO = "loading_scenario",
+  LOADING_PERSONA = "loading_persona",
+  AI_THINKING = "ai_thinking",
+  LOADING_FEEDBACK = "loading_feedback",
+  ENDING_SESSION = "ending_session",
+}
+
 export interface ThreadWithMessages {
   thread: Thread;
   messages: DBMessage[] | null;
+  loadingState: ThreadLoadingState;
 }
 
 export interface ThreadGroupWithThreads {
@@ -247,6 +258,10 @@ export interface CoreAppContextType {
     feedback: any
   ) => Promise<void>;
   selectUserThread: (threadId: string) => Promise<void>;
+  setThreadLoadingState: (
+    threadId: string,
+    loadingState: ThreadLoadingState
+  ) => void;
 
   // Scenario and Persona actions
   setScenario: (scenario: ScenarioGeneratorSchema | null) => void;
@@ -385,6 +400,7 @@ export function CoreAppDataProvider({
           userThreads: result.threads.map((thread) => ({
             thread,
             messages: null, // Messages will be fetched when thread is selected
+            loadingState: ThreadLoadingState.IDLE,
           })),
           threadStats: {
             total: result.totalCount,
@@ -458,7 +474,6 @@ export function CoreAppDataProvider({
       }
 
       const groups = await getThreadGroupsWithCounts(userAuth.userId);
-      // dispatch({ type: "SET_THREAD_GROUPS", payload: groups });
       setState((prevState) => ({
         ...prevState,
         threadGroups: groups.map((group) => ({
@@ -552,7 +567,6 @@ export function CoreAppDataProvider({
           groupFeedback,
         });
 
-        // dispatch({ type: "ADD_THREAD_GROUP", payload: newGroup });
         setState((prevState) => ({
           ...prevState,
           threadGroups: [
@@ -596,10 +610,6 @@ export function CoreAppDataProvider({
 
       try {
         await updateThreadGroup(id, updates);
-        // dispatch({
-        //   type: "UPDATE_THREAD_GROUP",
-        //   payload: { id, updates },
-        // });
         setState((prevState) => ({
           ...prevState,
           threadGroups: prevState.threadGroups.map((group) =>
@@ -633,7 +643,6 @@ export function CoreAppDataProvider({
 
       try {
         await deleteThreadGroup(id);
-        // dispatch({ type: "DELETE_THREAD_GROUP", payload: id });
         setState((prevState) => ({
           ...prevState,
           threadGroups: prevState.threadGroups.filter(
@@ -752,6 +761,7 @@ export function CoreAppDataProvider({
         const userThread: ThreadWithMessages = {
           thread: newThread,
           messages: null,
+          loadingState: ThreadLoadingState.IDLE,
         };
 
         // Add to local state
@@ -762,6 +772,7 @@ export function CoreAppDataProvider({
             {
               thread: newThread,
               messages: null,
+              loadingState: ThreadLoadingState.IDLE,
             },
           ],
         }));
@@ -921,6 +932,11 @@ export function CoreAppDataProvider({
         setState((prevState) => ({
           ...prevState,
           isLoading: true,
+          userThreads: prevState.userThreads.map((t) =>
+            t.thread.id === threadId
+              ? { ...t, loadingState: ThreadLoadingState.LOADING_MESSAGES }
+              : t
+          ),
         }));
 
         const { getMessagesByChatId } = await import(
@@ -944,6 +960,7 @@ export function CoreAppDataProvider({
               ? {
                   ...threadWithMessages,
                   messages: sortedMessages,
+                  loadingState: ThreadLoadingState.IDLE,
                 }
               : threadWithMessages
           ),
@@ -964,10 +981,30 @@ export function CoreAppDataProvider({
           ...prevState,
           error: "Failed to load thread messages",
           isLoading: false,
+          userThreads: prevState.userThreads.map((t) =>
+            t.thread.id === threadId
+              ? { ...t, loadingState: ThreadLoadingState.IDLE }
+              : t
+          ),
         }));
       }
     },
     [state.userThreads]
+  );
+
+  // Set thread loading state
+  const setThreadLoadingState = useCallback(
+    (threadId: string, loadingState: ThreadLoadingState) => {
+      setState((prevState) => ({
+        ...prevState,
+        userThreads: prevState.userThreads.map((threadWithMessages) =>
+          threadWithMessages.thread.id === threadId
+            ? { ...threadWithMessages, loadingState }
+            : threadWithMessages
+        ),
+      }));
+    },
+    []
   );
 
   // Action creators
@@ -1169,6 +1206,12 @@ export function CoreAppDataProvider({
     setError(null, null);
 
     try {
+      // Set loading state for scenario generation
+      setState((prevState) => ({
+        ...prevState,
+        isLoading: true,
+      }));
+
       // First get the user's internal ID from the database
       const { getUserAuthByEmail } = await import(
         "../lib/db/actions/user-auth-actions"
@@ -1262,7 +1305,11 @@ export function CoreAppDataProvider({
         ...prevState,
         userThreads: [
           ...prevState.userThreads,
-          { thread: newThread, messages: savedMessages },
+          {
+            thread: newThread,
+            messages: savedMessages,
+            loadingState: ThreadLoadingState.IDLE,
+          },
         ],
         activeThreadId: newThread.id,
         // Move customScenario/customPersona to scenario/persona after training starts
@@ -1319,6 +1366,9 @@ export function CoreAppDataProvider({
       setLoading(true);
       setError(null, null);
 
+      // Set thread to AI thinking state
+      setThreadLoadingState(threadId, ThreadLoadingState.AI_THINKING);
+
       try {
         // Add the new user message to conversation history for AI processing
         const { HumanMessage } = await import("@langchain/core/messages");
@@ -1343,6 +1393,7 @@ export function CoreAppDataProvider({
             threadWithMessages.thread.id === threadId
               ? {
                   ...threadWithMessages,
+                  loadingState: ThreadLoadingState.AI_THINKING,
                   messages: threadWithMessages.messages
                     ? [
                         ...threadWithMessages.messages,
@@ -1441,6 +1492,9 @@ export function CoreAppDataProvider({
           console.log(
             `Training completed for thread ${threadId}, updating database with completion status and feedback`
           );
+          // Set loading state to loading feedback
+          setThreadLoadingState(threadId, ThreadLoadingState.LOADING_FEEDBACK);
+
           await updateThread(threadId, {
             status: "completed",
             completedAt: new Date(),
@@ -1486,6 +1540,7 @@ export function CoreAppDataProvider({
                         : threadWithMessages.thread.completedAt,
                   },
                   messages: sortedMessages,
+                  loadingState: ThreadLoadingState.IDLE,
                 }
               : threadWithMessages
           ),
@@ -1593,6 +1648,9 @@ export function CoreAppDataProvider({
             ? error.message
             : "Failed to update training session";
         setError(errorMessage, "session");
+
+        // Reset loading state on error
+        setThreadLoadingState(threadId, ThreadLoadingState.IDLE);
       } finally {
         setLoading(false);
       }
@@ -1640,6 +1698,9 @@ export function CoreAppDataProvider({
 
       setLoading(true);
       setError(null, null);
+
+      // Set thread to ending session state
+      setThreadLoadingState(threadId, ThreadLoadingState.ENDING_SESSION);
 
       try {
         // Convert ExtendedHumanMessageImpl instances to HumanMessage
@@ -1690,6 +1751,7 @@ export function CoreAppDataProvider({
                     feedback: result.feedback || null,
                     updatedAt: completedAt,
                   },
+                  loadingState: ThreadLoadingState.IDLE,
                 }
               : threadWithMessages
           ),
@@ -1790,6 +1852,9 @@ export function CoreAppDataProvider({
             ? error.message
             : "Failed to end training session";
         setError(errorMessage, "session");
+
+        // Reset loading state on error
+        setThreadLoadingState(threadId, ThreadLoadingState.IDLE);
       } finally {
         setLoading(false);
       }
@@ -2039,6 +2104,7 @@ export function CoreAppDataProvider({
           const newThreads = results.map((result) => ({
             thread: result.thread,
             messages: result.messages,
+            loadingState: ThreadLoadingState.IDLE,
           }));
 
           // Randomly select one thread as active
@@ -2270,6 +2336,7 @@ export function CoreAppDataProvider({
     addMessageToTrainingSession,
     completeTrainingSession,
     selectUserThread,
+    setThreadLoadingState,
     // Scenario and Persona methods
     setScenario,
     setPersona,
