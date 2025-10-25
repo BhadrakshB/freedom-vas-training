@@ -13,6 +13,7 @@ import { MessageSquare, Trophy } from "lucide-react";
 import {
   ExtendedHumanMessageImpl,
   useCoreAppData,
+  ThreadLoadingState,
 } from "../contexts/CoreAppDataContext";
 import { BaseMessage, AIMessage } from "@langchain/core/messages";
 
@@ -124,6 +125,12 @@ export function TrainingChatArea() {
   const isSessionCompleted = trainingStatus === "completed";
   const isSessionError = state.errorType === "session";
   const isLoading = state.isLoading;
+
+  // Check if AI is thinking based on thread loading state
+  const isAIThinking = useMemo(() => {
+    if (!activeThread) return false;
+    return activeThread.loadingState === ThreadLoadingState.AI_THINKING;
+  }, [activeThread?.loadingState]);
 
   // Get group feedback if thread is part of a group
   const threadGroup = useMemo(() => {
@@ -259,7 +266,11 @@ export function TrainingChatArea() {
             <GroupFeedbackDisplay groupFeedback={groupFeedback!} />
           </div>
         ) : (
-          <MessageArea messages={messages} className="h-full" />
+          <MessageArea
+            messages={messages}
+            isAIThinking={isAIThinking}
+            className="h-full"
+          />
         )}
       </div>
 
@@ -276,7 +287,7 @@ export function TrainingChatArea() {
             onSendMessage={handleSendMessage}
             placeholder="Type your message to the guest..."
             className="border-t-0"
-            disabled={isLoading}
+            disabled={isLoading || isAIThinking}
           />
         )}
       </footer>

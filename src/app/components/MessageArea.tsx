@@ -1,17 +1,29 @@
 "use client";
 
 import * as React from "react";
-
+import { Sparkles } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { ExtendedHumanMessageImpl } from "../contexts/CoreAppDataContext";
 
 interface MessageAreaProps {
   messages: BaseMessage[];
+  isAIThinking?: boolean;
   className?: string;
 }
 
-function MessageArea({ messages, className }: MessageAreaProps) {
+function MessageArea({
+  messages,
+  isAIThinking = false,
+  className,
+}: MessageAreaProps) {
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive or AI starts thinking
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, isAIThinking]);
+
   return (
     <div
       className={cn(
@@ -20,10 +32,14 @@ function MessageArea({ messages, className }: MessageAreaProps) {
       )}
     >
       <div className="space-y-3 sm:space-y-4 max-w-4xl mx-auto">
-        {messages.length === 0 ? (
+        {messages.length === 0 && !isAIThinking ? (
           <EmptyState />
         ) : (
-          <MessageList messages={messages} />
+          <>
+            <MessageList messages={messages} />
+            {isAIThinking && <ThinkingAnimation />}
+            <div ref={messagesEndRef} />
+          </>
         )}
       </div>
     </div>
@@ -51,6 +67,24 @@ function EmptyState() {
         <p className="text-sm text-muted-foreground">
           Type your message below to get started
         </p>
+      </div>
+    </div>
+  );
+}
+
+function ThinkingAnimation() {
+  return (
+    <div className="flex w-full justify-start">
+      <div className="flex items-center gap-3 px-4 py-3 bg-muted/50 rounded-lg border border-border/50 max-w-[85%] sm:max-w-[80%] md:max-w-[70%]">
+        <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm text-muted-foreground">AI is thinking</span>
+          <div className="flex gap-1">
+            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:0ms]" />
+            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:150ms]" />
+            <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:300ms]" />
+          </div>
+        </div>
       </div>
     </div>
   );
