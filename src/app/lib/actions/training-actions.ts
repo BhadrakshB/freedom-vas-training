@@ -667,12 +667,14 @@ export async function endBulkTrainingSession(request: EndBulkTrainingRequest): P
     console.log(`Found ${threads.length} threads in group ${request.groupId}`);
 
     // Fetch messages for each thread
+    const { ThreadLoadingState } = await import('../../contexts/CoreAppDataContext');
     const threadsWithMessages = await Promise.all(
       threads.map(async (thread) => {
         const messages = await getMessagesByChatId(thread.id);
         return {
           thread,
           messages: messages || [],
+          loadingState: ThreadLoadingState.IDLE,
         };
       })
     );
