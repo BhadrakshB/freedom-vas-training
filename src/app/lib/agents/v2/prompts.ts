@@ -31,28 +31,6 @@ var scenarioGeneratorPromptXML = (state: typeof TrainingState.State) => {
         </Success_Criteria>
       </Scenario>
     </OUTPUT_SCHEMA>
-    <EXAMPLE_OUTPUT>
-      <Scenario>
-        <Scenario_Title>Double Booking on Arrival</Scenario_Title>
-        <Business_Context>A calendar sync error causes two guests to arrive at the same property simultaneously.</Business_Context>
-        <Guest_Situation>"I just arrived, but another family is already in the rental."</Guest_Situation>
-        <Constraints_and_Policies>
-          <Item>Refunds require manager approval.</Item>
-          <Item>Alternative accommodations must be offered if available.</Item>
-        </Constraints_and_Policies>
-        <Expected_VA_Challenges>
-          <Item>De-escalating guest frustration.</Item>
-          <Item>Finding alternative accommodations.</Item>
-          <Item>Escalating refund requests correctly.</Item>
-        </Expected_VA_Challenges>
-        <Difficulty_Level>Hard</Difficulty_Level>
-        <Success_Criteria>
-          <Item>VA responds empathetically within first message.</Item>
-          <Item>VA offers viable solution options promptly.</Item>
-          <Item>VA escalates refund request to manager correctly.</Item>
-        </Success_Criteria>
-      </Scenario>
-    </EXAMPLE_OUTPUT>
   </INSTRUCTIONS>
 </Prompt>`
 }
